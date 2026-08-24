@@ -83,6 +83,42 @@
   .astral{ animation:astralShift 3.4s linear infinite }
   .astral-card{ animation:astralEdge 3.4s linear infinite }
 
+  /* ---------------- printable cards ---------------- */
+  #sheet{display:none}
+  .pcard{
+    width:2.5in; height:3.5in; box-sizing:border-box;
+    border:1px solid #111; border-radius:0; padding:0.10in;
+    display:flex; flex-direction:column; background:#fff; color:#111;
+    font-family:"Helvetica Neue",Arial,sans-serif; position:relative; overflow:hidden;
+  }
+  .pcard .ptop{display:flex;justify-content:space-between;align-items:baseline}
+  .pcard .pname{font-size:10.5pt;font-weight:800;letter-spacing:-.01em;line-height:1}
+  .pcard .pcost{font-size:9pt;font-weight:800}
+  .pcard .pel{font-size:5.4pt;letter-spacing:.16em;font-weight:700;margin-top:2pt}
+  .pcard .part{flex:1;margin:4pt 0;border:1px solid #ddd;background:#f5f6f8;
+    display:flex;align-items:flex-end;justify-content:center;overflow:hidden}
+  .pcard .part canvas{width:100%;height:100%;object-fit:contain}
+  .pcard .pstats{display:flex;justify-content:space-between;font-size:8pt;font-weight:800;
+    border-top:1.5px solid #111;border-bottom:1px solid #ccc;padding:2.5pt 0}
+  .pcard .pab{font-size:5.6pt;line-height:1.5;margin-top:3pt;flex-shrink:0}
+  .pcard .pab b{font-size:5.6pt;letter-spacing:.08em}
+  .pcard .pflav{font-size:5.2pt;font-style:italic;color:#555;line-height:1.4;margin-top:3pt}
+  .pcard .pfoot{display:flex;justify-content:space-between;font-size:4.8pt;color:#777;
+    letter-spacing:.08em;margin-top:auto;padding-top:3pt}
+  .pcard .prar{position:absolute;top:0.10in;right:0.10in;width:9pt;height:9pt;
+    border-radius:50%;border:1.2px solid #111}
+
+  @media print{
+    @page{ size:letter; margin:0.35in }
+    body>*{ display:none !important }
+    #sheet{ display:block !important }
+    .ppage{ display:grid; grid-template-columns:repeat(3,2.5in);
+            grid-auto-rows:3.5in; gap:0.06in; justify-content:center;
+            page-break-after:always; break-after:page }
+    .ppage:last-child{ page-break-after:auto; break-after:auto }
+    .pcard{ box-shadow:none }
+  }
+
   /* ---------------- duel ---------------- */
   #duel{position:fixed;inset:0;background:#0b1017;display:none;flex-direction:column;z-index:40}
   #duel.on{display:flex}
@@ -129,7 +165,7 @@
 <div id="view"><canvas id="c"></canvas></div>
 
 <div class="hud" id="top">
-  <b>← → ↑ ↓</b> roam &nbsp; <b>P</b> party &nbsp; <b>F</b> fuse &nbsp; <b>B</b> shop &nbsp; <b>D</b> duel<br>
+  <b>← → ↑ ↓</b> roam &nbsp; <b>P</b> party &nbsp; <b>F</b> fuse &nbsp; <b>B</b> shop &nbsp; <b>D</b> duel &nbsp; <b>C</b> cards<br>
   walk the tall grass to meet beasts<br>
   party: <b id="hcount">0</b> &nbsp; region: <b id="hzone">—</b><br>
   <span id="hshrine"></span>
@@ -158,6 +194,23 @@
   <h2>SUPPLY POST</h2>
   <div class="grid" id="sgrid"></div>
 </div>
+
+<div class="panel" id="print">
+  <button class="close" data-x="print">×</button>
+  <h2>PRINT SHEET — REAL CARDS</h2>
+  <div style="font-size:11.5px;color:var(--dim);line-height:1.9;margin-bottom:14px">
+    Nine cards a page at trading-card size (2.5 × 3.5 in). Print on cardstock,
+    cut along the guides. Works with any home printer.
+  </div>
+  <div class="rowbtn">
+    <button class="btn" id="prcoll">MY COLLECTION</button>
+    <button class="btn alt" id="prset">GENERATE A 27-CARD SET</button>
+    <button class="btn alt" id="prgo">PRINT</button>
+  </div>
+  <div id="prcount" style="font-size:11px;color:var(--dim);margin-top:12px"></div>
+</div>
+
+<div id="sheet"></div>
 
 <div id="duel">
   <div id="dtop">
@@ -1235,6 +1288,7 @@ addEventListener('keydown',e=>{
   if(e.code==='KeyF') toggle('fuse');
   if(e.code==='KeyB') toggle('shop');
   if(e.code==='KeyD') startDuel();
+  if(e.code==='KeyC') toggle('print');
   if(e.code==='Escape') closeAll();
 });
 addEventListener('keyup',e=>keys[e.code]=false);
@@ -1809,6 +1863,7 @@ function toggle(id){
     if(id==='party') renderParty();
     else if(id==='fuse') renderFuse();
     else if(id==='shop') renderShop();
+    else if(id==='print') renderPrintPanel();
   }
 }
 function closeAll(){ document.querySelectorAll('.panel').forEach(p=>p.classList.remove('on')); }
@@ -2155,6 +2210,147 @@ function toast(s){
   clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove('on'), 2400);
 }
 
+
+
+/* ==================================================================
+   PRINTABLE CARDS
+   Lays the collection out nine to a page at 2.5 x 3.5 inches — the
+   same size as a real trading card — with set numbering, rarity pips
+   and flavour text, so a printed sheet reads like a proper set.
+   ================================================================== */
+const SET_CODE = 'MYS';
+
+/* one line of flavour, written from what the beast actually is */
+function flavourFor(b){
+  if(b.origin) return 'There was one. There will not be another.';
+  if(b.mutant) return 'Two beasts went into the altar. This came out.';
+  const lines = {
+    ember:['It sleeps in cooling ash and wakes hungry.',
+           'Nothing it has walked over has grown back.',
+           'You smell it a full minute before you see it.'],
+    tide: ['Found where the cold water stops moving.',
+           'It surfaces once a season and takes its time.',
+           'Fishermen leave the far cove alone.'],
+    gale: ['It has never once touched the ground willingly.',
+           'You hear it as a change in the weather.',
+           'It nests where nothing else can reach.'],
+    stone:['Older than the hill it was mistaken for.',
+           'It has been counted twice in a hundred years.',
+           'It moves about as often as the season turns.'],
+    bloom:['Everything it walks past grows back thicker.',
+           'The clearing it sleeps in is never the same shape.',
+           'Follow the flowers going the wrong way.'],
+    shade:['Seen most often just after you stop looking.',
+           'It keeps to the hour before anyone is awake.',
+           'The dogs notice it first and say nothing.'],
+    light:['It does not glow. The air around it gives up.',
+           'Standing near it feels like early morning.',
+           'It was worshipped once, briefly, by mistake.']
+  }[b.element];
+  if((b.rarity||0) >= 14) return 'Records of it disagree on everything but the size.';
+  return lines[(b.seed>>>3) % lines.length];
+}
+
+function cardArtCanvas(b, wIn, hIn){
+  const dpi = 200;                                  // print-quality raster
+  const w = Math.round(wIn*dpi), h = Math.round(hIn*dpi);
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const cx = cv.getContext('2d');
+  cx.save();
+  cx.translate(w/2, h*0.88);
+  const k = h/210;
+  cx.scale(k,k);
+  const cap = SPRITE_CAP; SPRITE_CAP = 170;
+  drawBeast(cx, b, 0, {scale:1});
+  SPRITE_CAP = cap;
+  cx.restore();
+  return cv;
+}
+
+function printCard(b, idx, total){
+  const R = rar(b);
+  const d = document.createElement('div');
+  d.className = 'pcard';
+
+  const top = document.createElement('div'); top.className='ptop';
+  top.innerHTML = '<span class="pname">'+b.name+'</span>'+
+                  '<span class="pcost">'+maxHP(b)+' HP</span>';
+
+  const el = document.createElement('div'); el.className='pel';
+  el.textContent = ELEMENTS[b.element].name+' · STAGE '+b.stage+' · LV '+b.level;
+
+  const art = document.createElement('div'); art.className='part';
+  art.appendChild(cardArtCanvas(b, 2.30, 1.45));
+
+  const st = document.createElement('div'); st.className='pstats';
+  st.innerHTML = '<span>ATK '+stat(b,'atk')+'</span>'+
+                 '<span>DEF '+stat(b,'def')+'</span>'+
+                 '<span>SPD '+stat(b,'spd')+'</span>';
+
+  const ab = document.createElement('div'); ab.className='pab';
+  ab.innerHTML = b.moves.slice(0,2).map(m=>
+    '<b>'+m.n.toUpperCase()+'</b> · '+m.p+(m.el?' · '+ELEMENTS[m.el].name:'')).join('<br>');
+
+  const fl = document.createElement('div'); fl.className='pflav';
+  fl.textContent = flavourFor(b);
+
+  const ft = document.createElement('div'); ft.className='pfoot';
+  ft.innerHTML = '<span>'+SET_CODE+' '+String(idx+1).padStart(3,'0')+'/'+
+                 String(total).padStart(3,'0')+'</span>'+
+                 '<span>'+R.n.toUpperCase()+'</span>';
+
+  const pip = document.createElement('div'); pip.className='prar';
+  pip.style.background = R.glow>0.3 ? R.c : (R.glow>0.05 ? R.c : '#fff');
+  pip.style.borderColor = '#111';
+
+  d.appendChild(top); d.appendChild(el); d.appendChild(art);
+  d.appendChild(st); d.appendChild(ab); d.appendChild(fl); d.appendChild(ft);
+  d.appendChild(pip);
+  return d;
+}
+
+let PRINT_SET = [];
+
+function layoutSheet(list){
+  PRINT_SET = list;
+  const sheet = document.getElementById('sheet');
+  sheet.innerHTML = '';
+  for(let i=0;i<list.length;i+=9){
+    const page = document.createElement('div'); page.className='ppage';
+    list.slice(i,i+9).forEach((b,j)=> page.appendChild(printCard(b, i+j, list.length)));
+    sheet.appendChild(page);
+  }
+  const pages = Math.ceil(list.length/9);
+  document.getElementById('prcount').textContent =
+    list.length+' cards · '+pages+' page'+(pages===1?'':'s')+' ready to print';
+}
+
+function renderPrintPanel(){
+  document.getElementById('prcount').textContent =
+    PRINT_SET.length ? PRINT_SET.length+' cards ready' : 'Pick what to lay out.';
+}
+
+document.getElementById('prcoll').onclick = ()=>{
+  if(!G.party.length){ toast('You have no beasts yet'); return; }
+  layoutSheet(G.party.slice());
+  toast(G.party.length+' cards laid out');
+};
+document.getElementById('prset').onclick = ()=>{
+  // a proper set: a spread of tiers, sorted so the rares sit at the end
+  const set = [];
+  for(let i=0;i<27;i++){
+    const luck = i>=24 ? 6 : i>=18 ? 2 : 0;
+    set.push(grow((Math.random()*4294967295)>>>0, { level: 8+Math.floor(Math.random()*22), luck }));
+  }
+  set.sort((a,b)=>(a.rarity||0)-(b.rarity||0));
+  layoutSheet(set);
+  toast('27-card set generated');
+};
+document.getElementById('prgo').onclick = ()=>{
+  if(!PRINT_SET.length){ toast('Lay out some cards first'); return; }
+  window.print();
+};
 
 /* ==================================================================
    DUEL — the trading card game.
