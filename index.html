@@ -1,0 +1,2089 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MYSTIC — beasts, fusions, evolutions</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#151b24; --line:#232c39; --ink:#e8eef6; --dim:#7d8a9c;
+    --gold:#e8b93a; --good:#4ade80; --bad:#f87171;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:var(--bg);color:var(--ink);overflow:hidden;
+    font-family:ui-monospace,Menlo,monospace;-webkit-font-smoothing:antialiased}
+  canvas{display:block}
+  #view{position:fixed;inset:0}
+  #view canvas{width:100%;height:100%}
+
+  .hud{position:fixed;font-size:11px;letter-spacing:.06em}
+  #top{left:16px;top:14px;color:var(--dim);line-height:1.9}
+  #top b{color:var(--ink)}
+  #coin{right:16px;top:14px;color:var(--gold);font-size:13px}
+
+  /* panels */
+  .panel{position:fixed;inset:auto 0 0 0;background:var(--panel);border-top:1px solid var(--line);
+    padding:16px 18px;max-height:76%;overflow-y:auto;display:none}
+  .panel.on{display:block}
+  .panel h2{font-size:11px;letter-spacing:.22em;color:var(--dim);margin-bottom:14px;font-weight:600}
+  .close{position:absolute;right:14px;top:12px;background:none;border:0;color:var(--dim);
+    font-size:20px;cursor:pointer;font-family:inherit}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+  .card{background:#101720;border:1px solid var(--line);border-radius:12px;padding:10px;
+    cursor:pointer;transition:.14s;position:relative}
+  .card:hover{border-color:#3a4757;transform:translateY(-2px)}
+  .card.sel{border-color:var(--gold)}
+  .card canvas{width:100%;height:84px;background:#0b1119;border-radius:8px}
+  .card .nm{font-size:12px;margin-top:7px;font-weight:600}
+  .card .mt{font-size:10px;color:var(--dim);margin-top:3px;display:flex;justify-content:space-between}
+  .el{display:inline-block;padding:2px 6px;border-radius:4px;font-size:9px;letter-spacing:.1em}
+
+  .btn{background:var(--ink);color:#0d1117;border:0;border-radius:9px;padding:11px 18px;
+    font-size:12px;font-weight:700;letter-spacing:.1em;cursor:pointer;font-family:inherit}
+  .btn.alt{background:transparent;color:var(--ink);border:1px solid var(--line)}
+  .btn:disabled{opacity:.35;cursor:default}
+  .btn:active{transform:scale(.97)}
+  .rowbtn{display:flex;gap:9px;margin-top:14px;flex-wrap:wrap}
+
+  /* battle */
+  #battle{position:fixed;inset:0;background:#0d1117;display:none;flex-direction:column}
+  #battle.on{display:flex}
+  #bstage{flex:1;position:relative}
+  #bstage canvas{width:100%;height:100%}
+  .bar{position:absolute;background:var(--panel);border:1px solid var(--line);
+    border-radius:10px;padding:10px 13px;min-width:190px}
+  #bfoe{left:18px;top:18px} #bme{right:18px;bottom:14px}
+  .bar .n{font-size:12px;font-weight:700;display:flex;justify-content:space-between;gap:10px}
+  .bar .lv{color:var(--dim);font-weight:400}
+  .hpwrap{height:6px;background:#0b1119;border-radius:4px;margin-top:8px;overflow:hidden}
+  .hpwrap i{display:block;height:100%;background:var(--good);transition:width .35s}
+  .hpnum{font-size:10px;color:var(--dim);margin-top:5px}
+  #bmenu{border-top:1px solid var(--line);background:var(--panel);padding:14px 16px}
+  #blog{font-size:12px;color:var(--dim);min-height:34px;margin-bottom:10px;line-height:1.6}
+  #bmoves{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .mv{background:#101720;border:1px solid var(--line);border-radius:9px;padding:11px;
+    cursor:pointer;font-family:inherit;color:var(--ink);text-align:left}
+  .mv:hover{border-color:#3a4757}
+  .mv b{font-size:12px;display:block}
+  .mv span{font-size:10px;color:var(--dim)}
+  #brow{display:flex;gap:8px;margin-top:9px}
+
+  @keyframes astralShift{
+    0%{ color:#a5f3fc; text-shadow:0 0 14px #a5f3fc }
+    25%{ color:#c4b5fd; text-shadow:0 0 16px #c4b5fd }
+    50%{ color:#fde68a; text-shadow:0 0 18px #fde68a }
+    75%{ color:#f9a8d4; text-shadow:0 0 16px #f9a8d4 }
+    100%{ color:#a5f3fc; text-shadow:0 0 14px #a5f3fc }
+  }
+  @keyframes astralEdge{
+    0%{ border-color:#a5f3fc; box-shadow:0 0 18px #a5f3fc66 }
+    25%{ border-color:#c4b5fd; box-shadow:0 0 22px #c4b5fd66 }
+    50%{ border-color:#fde68a; box-shadow:0 0 26px #fde68a66 }
+    75%{ border-color:#f9a8d4; box-shadow:0 0 22px #f9a8d466 }
+    100%{ border-color:#a5f3fc; box-shadow:0 0 18px #a5f3fc66 }
+  }
+  .astral{ animation:astralShift 3.4s linear infinite }
+  .astral-card{ animation:astralEdge 3.4s linear infinite }
+
+  #toast{position:fixed;left:50%;top:22px;transform:translateX(-50%);background:var(--panel);
+    border:1px solid var(--line);border-radius:10px;padding:11px 18px;font-size:12px;
+    display:none;z-index:60}
+  #toast.on{display:block}
+</style>
+
+<div id="view"><canvas id="c"></canvas></div>
+
+<div class="hud" id="top">
+  <b>← → ↑ ↓</b> roam &nbsp; <b>P</b> party &nbsp; <b>F</b> fuse &nbsp; <b>B</b> shop<br>
+  walk the tall grass to meet beasts<br>
+  party: <b id="hcount">0</b> &nbsp; region: <b id="hzone">—</b><br>
+  <span id="hshrine"></span>
+</div>
+<div class="hud" id="coin">◈ <span id="coins">0</span></div>
+
+<div class="panel" id="party">
+  <button class="close" data-x="party">×</button>
+  <h2>YOUR BEASTS — <span id="pcount">0</span></h2>
+  <div id="stylepick" style="display:flex;gap:7px;margin-bottom:14px;flex-wrap:wrap"></div>
+  <div class="grid" id="pgrid"></div>
+</div>
+
+<div class="panel" id="fuse">
+  <button class="close" data-x="fuse">×</button>
+  <h2>FUSION ALTAR — PICK TWO</h2>
+  <div class="grid" id="fgrid"></div>
+  <div class="rowbtn">
+    <button class="btn" id="dofuse" disabled>FUSE</button>
+    <span id="fhint" style="font-size:11px;color:var(--dim);align-self:center"></span>
+  </div>
+</div>
+
+<div class="panel" id="shop">
+  <button class="close" data-x="shop">×</button>
+  <h2>SUPPLY POST</h2>
+  <div class="grid" id="sgrid"></div>
+</div>
+
+<div id="battle">
+  <div id="bstage">
+    <canvas id="bc"></canvas>
+    <div class="bar" id="bfoe"></div>
+    <div class="bar" id="bme"></div>
+  </div>
+  <div id="bmenu">
+    <div id="blog"></div>
+    <div id="bmoves"></div>
+    <div id="brow">
+      <button class="btn alt" id="bbag">BAG</button>
+      <button class="btn alt" id="bswap">SWITCH</button>
+      <button class="btn alt" id="bcatch">CATCH ◈</button>
+      <button class="btn alt" id="brun">RUN</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ==================================================================
+   MYSTIC
+   Every beast is grown from one number.  The seed decides its body
+   plan, its parts, its colours, its element and its stats — so the
+   number of possible beasts is the size of the seed space, not the
+   size of a hand-drawn list.  Fusing two beasts mixes their seeds,
+   which is why a fusion looks like both parents.
+   ================================================================== */
+
+/* ---------- deterministic RNG (mulberry32) ---------- */
+function rng(seed){
+  let a = seed >>> 0;
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+/* ---------- the vocabulary of life ---------- */
+const PLANS = ['beast','serpent','avian','biped'];
+const ELEMENTS = {
+  ember:{col:'#ff7043', name:'EMBER'},  tide:{col:'#42a5f5', name:'TIDE'},
+  gale:{col:'#a5d6a7',  name:'GALE'},   stone:{col:'#bcaaa4', name:'STONE'},
+  bloom:{col:'#f06292', name:'BLOOM'},  shade:{col:'#9575cd', name:'SHADE'},
+  light:{col:'#ffd54f', name:'LIGHT'}
+};
+const EL = Object.keys(ELEMENTS);
+// attacker -> defenders it is strong against
+const STRONG = {
+  ember:['gale','bloom'], tide:['ember','stone'], gale:['stone','tide'],
+  stone:['ember','light'], bloom:['tide','stone'], shade:['light','bloom'],
+  light:['shade','bloom']
+};
+const PAL = {
+  ember:[['#ff8a4c','#ffd0b0','#7a2d12'],['#e64a19','#ffab91','#3e1108']],
+  tide: [['#4fc3f7','#b3e5fc','#01579b'],['#26a69a','#b2dfdb','#004d40']],
+  gale: [['#9ccc65','#dcedc8','#33691e'],['#aed581','#f1f8e9','#558b2f']],
+  stone:[['#a1887f','#d7ccc8','#3e2723'],['#90a4ae','#cfd8dc','#37474f']],
+  bloom:[['#f48fb1','#fce4ec','#880e4f'],['#ba68c8','#f3e5f5','#4a148c']],
+  shade:[['#7e57c2','#d1c4e9','#311b92'],['#5c6bc0','#c5cae9','#1a237e']],
+  light:[['#ffd54f','#fff8e1','#f57f17'],['#fff176','#fffde7','#f9a825']]
+};
+const SYL_A = ['ae','vor','lu','kry','mor','sel','tha','zor','nim','ory','fen','cal','dra','sy','ith'];
+const SYL_B = ['mira','thos','wyn','dris','pha','nyx','ora','vel','gath','rune','lith','sara','dun'];
+const SYL_C = ['','','','ix','ar','eth','on','ys','ael'];
+
+const PARTS = ['horn','crest','wings','mane','spikes','tail','halo','fangs','plates','antennae'];
+
+
+/* ==================================================================
+   RARITY — 20 tiers.  Each step is rarer, stronger, and grows more
+   parts than the last.  Weights fall off geometrically, so the top
+   tiers are genuinely once-in-a-long-while finds rather than just
+   another colour of name.
+   ================================================================== */
+const RARITIES = [
+  { n:'Common',    c:'#9aa5b1', w:1000, m:1.00, parts:0.00, glow:0 },
+  { n:'Uncommon',  c:'#7fd18a', w:620,  m:1.08, parts:0.03, glow:0 },
+  { n:'Rare',      c:'#5fa8f5', w:380,  m:1.17, parts:0.06, glow:0 },
+  { n:'Superior',  c:'#4ecdc4', w:230,  m:1.27, parts:0.09, glow:0 },
+  { n:'Elite',     c:'#a78bfa', w:140,  m:1.38, parts:0.12, glow:.15 },
+  { n:'Epic',      c:'#c084fc', w:86,   m:1.50, parts:0.15, glow:.2 },
+  { n:'Arcane',    c:'#e879f9', w:53,   m:1.63, parts:0.18, glow:.25 },
+  { n:'Mythic',    c:'#f472b6', w:33,   m:1.77, parts:0.21, glow:.3 },
+  { n:'Legendary', c:'#fb923c', w:20,   m:1.92, parts:0.24, glow:.35 },
+  { n:'Ancient',   c:'#f59e0b', w:12.5, m:2.08, parts:0.27, glow:.4 },
+  { n:'Primal',    c:'#dc2626', w:7.7,  m:2.25, parts:0.30, glow:.45 },
+  { n:'Celestial', c:'#38bdf8', w:4.8,  m:2.43, parts:0.33, glow:.5 },
+  { n:'Void',      c:'#6d28d9', w:3.0,  m:2.62, parts:0.36, glow:.55 },
+  { n:'Radiant',   c:'#fde047', w:1.85, m:2.82, parts:0.40, glow:.6 },
+  { n:'Eternal',   c:'#2dd4bf', w:1.15, m:3.03, parts:0.44, glow:.65 },
+  { n:'Divine',    c:'#fef3c7', w:0.71, m:3.25, parts:0.48, glow:.7 },
+  { n:'Titan',     c:'#b45309', w:0.44, m:3.48, parts:0.52, glow:.75 },
+  { n:'Cosmic',    c:'#818cf8', w:0.27, m:3.72, parts:0.56, glow:.8 },
+  { n:'Omega',     c:'#f43f5e', w:0.17, m:3.97, parts:0.60, glow:.9 },
+  { n:'Genesis',   c:'#ffffff', w:0.10, m:4.25, parts:0.65, glow:1 },
+  // ASTRAL sits outside the table.  Its weight is zero, so no amount of
+  // hunting will ever roll one — the only way to get one is to fuse two
+  // Genesis beasts and get lucky.
+  { n:'Astral',    c:'#a5f3fc', w:0,    m:6.00, parts:0.90, glow:1.6, astral:true },
+  // ORIGIN is a tier with exactly one member.  It cannot be rolled, cannot
+  // be fused into existence, and cannot be caught.  One event, one chance.
+  { n:'Origin',    c:'#fff7d6', w:0,    m:9.00, parts:1.00, glow:2.2, astral:true, origin:true },
+];
+const ORIGIN_TIER = 21;
+const ASTRAL = 20;                 // index of the tier that cannot be rolled
+const TOP_ROLLABLE = 19;           // Genesis
+const RAR_TOTAL = RARITIES.reduce((a,r)=>a+r.w,0);
+
+function rollOneRarity(rand){
+  let x = rand() * RAR_TOTAL;
+  for(let i=0;i<RARITIES.length;i++){
+    x -= RARITIES[i].w;
+    if(x <= 0) return i;
+  }
+  return 0;
+}
+/* Luck = extra rolls, keep the best.  Dividing the roll the way this used
+   to do actually pushed results toward COMMON, which was backwards.
+   Best-of-N is monotonic: more luck can only ever help.               */
+function rollRarity(rand, luck){
+  let best = rollOneRarity(rand);
+  let extra = luck || 0;
+  while(extra > 0){
+    if(extra >= 1 || rand() < extra){
+      const r2 = rollOneRarity(rand);
+      if(r2 > best) best = r2;
+    }
+    extra -= 1;
+  }
+  return best;
+}
+function rar(b){ return RARITIES[b.rarity || 0]; }
+
+/* ---------- grow a beast from a seed ---------- */
+function grow(seed, opt){
+  opt = opt || {};
+  const r = rng(seed);
+  const plan = opt.plan || PLANS[Math.floor(r()*PLANS.length)];
+  const element = opt.element || EL[Math.floor(r()*EL.length)];
+  const pset = PAL[element][Math.floor(r()*PAL[element].length)];
+
+  const rarity = opt.rarity!==undefined ? opt.rarity : rollRarity(r, opt.luck||0);
+  const R = RARITIES[rarity];
+
+  // parts: each has an independent chance, and rarer beasts grow more
+  const parts = {};
+  PARTS.forEach(p=>{
+    const base = (p==='tail'?0.72: p==='wings'?0.42: 0.36);
+    parts[p] = r() < Math.min(0.95, base + R.parts);
+  });
+  if (plan==='avian') parts.wings = true;
+  if (plan==='serpent'){ parts.tail = true; parts.mane = r()<0.5; }
+
+  const name = (opt.name) || (
+    SYL_A[Math.floor(r()*SYL_A.length)] +
+    SYL_B[Math.floor(r()*SYL_B.length)] +
+    SYL_C[Math.floor(r()*SYL_C.length)]
+  ).replace(/^./, ch=>ch.toUpperCase());
+
+  const build = 0.7 + r()*0.6;                 // body mass
+  const base = {
+    hp:  Math.round(38 + r()*30 + build*14),
+    atk: Math.round(12 + r()*14 + (parts.fangs?4:0) + (parts.horn?3:0)),
+    def: Math.round(11 + r()*13 + (parts.plates?5:0) + (parts.spikes?3:0)),
+    spd: Math.round(12 + r()*14 + (parts.wings?5:0) - build*4)
+  };
+
+  const b = {
+    seed, plan, element, name, rarity,
+    pal:{ body:opt.pal?opt.pal.body:pset[0], belly:opt.pal?opt.pal.belly:pset[1],
+          accent:opt.pal?opt.pal.accent:pset[2] },
+    parts, build, base,
+    stage: 1, level: opt.level || 1, xp: 0,
+    lineage: opt.lineage || []
+  };
+  b.hp = maxHP(b);
+  b.moves = makeMoves(b);
+  return b;
+}
+
+function stageMul(b){ return [1, 1.0, 1.28, 1.62][b.stage] || 1; }
+function rarMul(b){ return (RARITIES[b.rarity||0] || RARITIES[0]).m; }
+function maxHP(b){
+  if(b.origin) return 1800;                       // hand-tuned boss pool
+  return Math.round((b.base.hp + b.level*4) * stageMul(b) * rarMul(b));
+}
+function stat(b,k){
+  // The Origin is balanced by hand: strong enough to threaten a good party,
+  // not so strong that the fight is arithmetic instead of tactics.
+  if(b.origin){
+    const base = { hp:1800, atk:220, def:40, spd:95 }[k];
+    return k==='atk' ? Math.round(base * (b.atkBuff||1)) : base;
+  }
+  return Math.round((b.base[k] + b.level*1.6) * stageMul(b) * rarMul(b));
+}
+
+const MOVE_NAMES = {
+  ember:['Cinder Lash','Flare Fang','Emberfall'], tide:['Riptide','Frost Coil','Deepcall'],
+  gale:['Wind Shear','Sky Rend','Gust Veil'],     stone:['Boulder Slam','Quake Step','Granite Guard'],
+  bloom:['Thorn Whip','Petal Storm','Root Bind'], shade:['Umbra Bite','Night Shroud','Hex Pulse'],
+  light:['Radiant Arc','Dawn Lance','Halo Burst']
+};
+function makeMoves(b){
+  const r = rng(b.seed ^ 0x9e37);
+  const el = MOVE_NAMES[b.element];
+  const m = [
+    { n:el[0], p:34, el:b.element },
+    { n:el[1], p:48, el:b.element },
+    { n:'Strike', p:28, el:null }
+  ];
+  if (b.parts.wings) m.push({ n:'Wing Buffet', p:40, el:'gale' });
+  else if (b.parts.horn) m.push({ n:'Gore', p:44, el:null });
+  else m.push({ n:el[2], p:56, el:b.element });
+  return m.slice(0,4);
+}
+
+/* ==================================================================
+   DRAWING.  Four body plans, then parts layered on top.  Each plan
+   is drawn on its own terms — a serpent has no legs, an avian stands
+   on two, a beast walks on four.  Parts attach at plan-specific
+   anchor points so a horn lands on a head wherever that head is.
+   ================================================================== */
+const INK = '#0b0f14';
+
+function lineTo(X,x1,y1,x2,y2,w,col){
+  X.beginPath(); X.strokeStyle=col; X.lineWidth=w; X.lineCap='round';
+  X.moveTo(x1,y1); X.lineTo(x2,y2); X.stroke();
+}
+function limb(X,x,y,a,bl,tx,ty,flip,w,col){
+  const d = Math.min(Math.hypot(tx-x,ty-y), a+bl-0.01);
+  const base = Math.atan2(ty-y,tx-x);
+  const ang = Math.acos(Math.max(-1,Math.min(1,(a*a+d*d-bl*bl)/(2*a*d))));
+  const jx = x+Math.cos(base+ang*flip)*a, jy = y+Math.sin(base+ang*flip)*a;
+  lineTo(X,x,y,jx,jy,w,col); lineTo(X,jx,jy,tx,ty,w,col);
+}
+function ell(X,x,y,rx,ry,fill,lw){
+  X.beginPath(); X.ellipse(x,y,rx,ry,0,0,7);
+  if(fill){ X.fillStyle=fill; X.fill(); }
+  if(lw){ X.lineWidth=lw; X.strokeStyle=INK; X.stroke(); }
+}
+
+
+/* ==================================================================
+   SPRITES
+   If a file exists at refs/<beastname>.png it is used instead of the
+   drawn version.  Generated art comes back with a solid background,
+   so on load we flood-fill inward from the edges and knock that
+   background out, then crop to what is left.  A beast with no file
+   just keeps its drawn form — nothing breaks.
+   ================================================================== */
+const SPRITE_CACHE = {};   // name -> {canvas,w,h} | 'loading' | 'none'
+
+
+/* ------------------------------------------------------------------
+   Auto-slicer.  Generated sheets come back in whatever arrangement the
+   model felt like — a row of four, a 2x2 grid, uneven spacing, frames
+   of different sizes.  So rather than assume a layout we knock out the
+   background, find the bands of rows that contain anything, then the
+   bands of columns inside each row band.  Each island is one frame.
+   Frames are then re-centred on a common canvas, anchored at the
+   bottom, so the creature doesn't jitter between frames.
+   ------------------------------------------------------------------ */
+function sliceSheet(img){
+  const cut = keyOutBackgroundRaw(img);
+  const {data:D, w, h} = cut;
+  const A = (x,y)=>D[(y*w+x)*4+3];
+
+  const rowHas=[], colHasIn=[];
+  for(let y=0;y<h;y++){
+    let any=false;
+    for(let x=0;x<w;x++) if(A(x,y)>16){ any=true; break; }
+    rowHas.push(any);
+  }
+  // group rows into bands, ignoring hairline gaps
+  const bands=[]; let start=-1, gap=0;
+  for(let y=0;y<h;y++){
+    if(rowHas[y]){ if(start<0) start=y; gap=0; }
+    else if(start>=0){ gap++; if(gap>Math.max(6,h*0.02)){ bands.push([start,y-gap]); start=-1; } }
+  }
+  if(start>=0) bands.push([start,h-1]);
+
+  const boxes=[];
+  bands.forEach(([y0,y1])=>{
+    const cols=[];
+    for(let x=0;x<w;x++){
+      let any=false;
+      for(let y=y0;y<=y1;y++) if(A(x,y)>16){ any=true; break; }
+      cols.push(any);
+    }
+    let cs=-1, cg=0;
+    for(let x=0;x<w;x++){
+      if(cols[x]){ if(cs<0) cs=x; cg=0; }
+      else if(cs>=0){ cg++; if(cg>Math.max(6,w*0.015)){ boxes.push([cs,y0,x-cg,y1]); cs=-1; } }
+    }
+    if(cs>=0) boxes.push([cs,y0,w-1,y1]);
+  });
+
+  // drop specks that are clearly not a frame
+  const areas = boxes.map(b=>(b[2]-b[0])*(b[3]-b[1]));
+  const biggest = Math.max.apply(null, areas.concat([1]));
+  let keep = boxes.filter((b,i)=>areas[i] > biggest*0.12);
+  if(keep.length < 2) return null;
+
+  /* Poses whose wings or effects touch get welded into one wide box.
+     Compare every box against the median width and split any that is a
+     clean multiple of it back into equal columns.                     */
+  {
+    const widths = keep.map(b=>b[2]-b[0]).slice().sort((a,b)=>a-b);
+    const med = widths[Math.floor(widths.length/2)] || 1;
+    const split = [];
+    keep.forEach(b=>{
+      const wide = b[2]-b[0];
+      const n = Math.round(wide / med);
+      if(n >= 2 && Math.abs(wide/med - n) < 0.35){
+        const step = wide / n;
+        for(let i=0;i<n;i++)
+          split.push([Math.round(b[0]+i*step), b[1], Math.round(b[0]+(i+1)*step), b[3]]);
+      } else split.push(b);
+    });
+    keep = split;
+  }
+
+  // tighten each box to its own contents
+  const tight = keep.map(([x0,y0,x1,y1])=>{
+    let a=x1,b=y1,c=x0,d=y0;
+    for(let y=y0;y<=y1;y++) for(let x=x0;x<=x1;x++)
+      if(A(x,y)>16){ if(x<a)a=x; if(x>c)c=x; if(y<b)b=y; if(y>d)d=y; }
+    return [a,b,c,d];
+  });
+
+  const fw = Math.max.apply(null, tight.map(b=>b[2]-b[0]+1));
+  const fh = Math.max.apply(null, tight.map(b=>b[3]-b[1]+1));
+
+  const src=document.createElement('canvas'); src.width=w; src.height=h;
+  src.getContext('2d').putImageData(new ImageData(D,w,h),0,0);
+
+  const frames = tight.map(([x0,y0,x1,y1])=>{
+    const cw=x1-x0+1, ch=y1-y0+1;
+    const cv=document.createElement('canvas'); cv.width=fw; cv.height=fh;
+    const cx=cv.getContext('2d');
+    cx.imageSmoothingEnabled=false;
+    cx.drawImage(src, x0,y0,cw,ch, (fw-cw)/2, fh-ch, cw,ch);   // bottom-centred
+    return {canvas:cv, w:fw, h:fh};
+  });
+  return {frames, fw, fh};
+}
+
+/* background removal that hands back raw pixels, for the slicer */
+function keyOutBackgroundRaw(img){
+  const w=img.naturalWidth, h=img.naturalHeight;
+  const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+  const cx=cv.getContext('2d',{willReadFrequently:true});
+  cx.drawImage(img,0,0);
+  const id=cx.getImageData(0,0,w,h), D=id.data;
+  const at=(x,y)=>(y*w+x)*4;
+  let br=0,bg=0,bb=0;
+  [at(0,0),at(w-1,0),at(0,h-1),at(w-1,h-1)].forEach(i=>{ br+=D[i]; bg+=D[i+1]; bb+=D[i+2]; });
+  br/=4; bg/=4; bb/=4;
+  // Adaptive tolerance: sample the border, measure how much it actually
+  // varies, and allow only a little more than that.  Generated art has a
+  // near-flat background, so this stays tight enough not to eat dark
+  // pixels in the creature itself.
+  let n=0, varSum=0;
+  for(let x=0;x<w;x+=3){
+    [at(x,0), at(x,h-1)].forEach(i=>{
+      const dr=D[i]-br,dg=D[i+1]-bg,db=D[i+2]-bb;
+      varSum += dr*dr+dg*dg+db*db; n++;
+    });
+  }
+  for(let y=0;y<h;y+=3){
+    [at(0,y), at(w-1,y)].forEach(i=>{
+      const dr=D[i]-br,dg=D[i+1]-bg,db=D[i+2]-bb;
+      varSum += dr*dr+dg*dg+db*db; n++;
+    });
+  }
+  const sd = Math.sqrt(varSum/Math.max(1,n));          // typical border deviation
+  const per = Math.max(10, Math.min(40, sd*2.5 + 8));  // per-channel allowance
+  const TOL = per*per*3;
+  const near=i=>{ const dr=D[i]-br,dg=D[i+1]-bg,db=D[i+2]-bb; return dr*dr+dg*dg+db*db<TOL; };
+  const seen=new Uint8Array(w*h), stack=[];
+  for(let x=0;x<w;x++){ stack.push(x,(h-1)*w+x); }
+  for(let y=0;y<h;y++){ stack.push(y*w, y*w+w-1); }
+  while(stack.length){
+    const pi=stack.pop();
+    if(seen[pi]) continue; seen[pi]=1;
+    const i=pi*4; if(!near(i)) continue;
+    D[i+3]=0;
+    const x=pi%w, y=(pi-x)/w;
+    if(x>0)stack.push(pi-1); if(x<w-1)stack.push(pi+1);
+    if(y>0)stack.push(pi-w); if(y<h-1)stack.push(pi+w);
+  }
+  return {data:D, w, h};
+}
+
+
+const ATTACK_CACHE = {};   // name -> {frames,fw,fh} | 'loading' | 'none'
+function attackFor(b){
+  const key=(b.spriteKey||b.name).toLowerCase().replace(/\s+/g,'');
+  const got=ATTACK_CACHE[key];
+  if(got && got!=='loading' && got!=='none') return got;
+  if(got) return null;
+  ATTACK_CACHE[key]='loading';
+  const img=new Image();
+  img.onload=()=>{
+    try{
+      const sl=sliceSheet(img);
+      ATTACK_CACHE[key] = (sl && sl.frames.length>1)
+        ? { frames:sl.frames, fw:sl.fw, fh:sl.fh, pixel:true }
+        : 'none';
+    }catch(e){ ATTACK_CACHE[key]='none'; }
+  };
+  img.onerror=()=>{ ATTACK_CACHE[key]='none'; };
+  img.src='refs/'+key+'_attack.png';
+  return null;
+}
+
+function spriteFor(b){
+  const key = (b.spriteKey || b.name).toLowerCase().replace(/\s+/g,'');
+  const got = SPRITE_CACHE[key];
+  if(got && got!=='loading' && got!=='none') return got;
+  if(got) return null;
+  SPRITE_CACHE[key]='loading';
+
+  /* Art files are prepared ahead of time with real transparency, so the
+     game never reads image pixels.  That matters: a page opened straight
+     from disk is not allowed to read local image data, and trying to do
+     it here is what stopped sprites appearing at all.                  */
+  const load = url => new Promise(res=>{
+    const im=new Image();
+    im.onload=()=>res(im);
+    im.onerror=()=>res(null);
+    im.src=url;
+  });
+
+  (async ()=>{
+    // 1. a pre-sliced walk cycle:  <name>_walk_0.png, _1, _2 ...
+    const frames=[];
+    for(let i=0;i<8;i++){
+      const im=await load('refs/'+key+'_walk_'+i+'.png');
+      if(!im) break;
+      frames.push({canvas:im, w:im.naturalWidth, h:im.naturalHeight});
+    }
+    if(frames.length>1){
+      SPRITE_CACHE[key]={ canvas:frames[0].canvas, w:frames[0].w, h:frames[0].h,
+                          frames, frameH:frames[0].h, pixel:true };
+      return;
+    }
+    // 2. a whole sheet we slice ourselves: <name>_walk.png / <name>_sheet.png
+    for(const url of ['refs/'+key+'_walk.png','refs/'+key+'_sheet.png']){
+      const im=await load(url);
+      if(!im) continue;
+      let sliced=null;
+      try{ sliced=sliceSheet(im); }catch(e){ sliced=null; }
+      if(sliced && sliced.frames.length>1){
+        SPRITE_CACHE[key]={ canvas:sliced.frames[0].canvas, w:sliced.fw, h:sliced.fh,
+                            frames:sliced.frames, frameH:sliced.fh, pixel:true };
+        return;
+      }
+    }
+
+    // 3. a single still, pixel version preferred
+    for(const [url,pixel] of [['refs/'+key+'_px.png',true], ['refs/'+key+'.png',false]]){
+      const im=await load(url);
+      if(im){
+        SPRITE_CACHE[key]={ canvas:im, w:im.naturalWidth, h:im.naturalHeight, pixel };
+        return;
+      }
+    }
+    SPRITE_CACHE[key]='none';
+  })();
+
+  return null;
+}
+
+let SPRITE_CAP = 0;   // set per-frame by the battle stage; 0 = no limit
+
+function drawBeast(X, b, t, opt){
+  opt = opt || {};
+  const walk = opt.walk || 0;          // walk phase
+  const moving = opt.moving || false;
+  const S = (opt.scale || 1) * (0.82 + b.build*0.22) * stageMul(b);
+
+  // mid-swing, and this beast has attack art? play that instead
+  const atk = (opt.attack!=null) ? attackFor(b) : null;
+  if(atk && opt.attack!=null){
+    const unit    = S / (0.82 + b.build*0.22);
+    const targetH = Math.min(150 * unit, SPRITE_CAP || Infinity), maxW = 250 * unit;
+    const n = atk.frames.length;
+    const idx = Math.max(0, Math.min(n-1, Math.floor(opt.attack * n)));
+    const f = atk.frames[idx];
+    const k = Math.min(targetH / atk.fh, maxW / f.w);
+    const smooth = X.imageSmoothingEnabled;
+    X.imageSmoothingEnabled = false;
+    X.drawImage(f.canvas, -f.w*k/2, -f.h*k, f.w*k, f.h*k);
+    X.imageSmoothingEnabled = smooth;
+    return;
+  }
+
+  // a real image, if this beast has one
+  const sp = spriteFor(b);
+  if(sp){
+    const unit    = S / (0.82 + b.build*0.22);
+    const targetH = Math.min(150 * unit, SPRITE_CAP || Infinity);
+    // Long, low creatures (serpents especially) are far wider than they are
+    // tall, so scaling by height alone makes them swallow the screen.  Cap
+    // the width too and take whichever limit binds first.
+    const maxW    = 250 * unit;
+    const smooth = X.imageSmoothingEnabled;
+    if(sp.pixel) X.imageSmoothingEnabled = false;   // keep the pixels crisp
+
+    if(sp.frames && sp.frames.length>1){
+      const n=sp.frames.length;
+      // walking steps through the cycle; standing still rests on frame 1
+      const idx = moving ? (Math.floor(walk*1.6) % n + n) % n : 1 % n;
+      const f = sp.frames[idx];
+      const k = Math.min(targetH / sp.frameH, maxW / f.w);
+      X.drawImage(f.canvas, -f.w*k/2, -f.h*k, f.w*k, f.h*k);
+    } else {
+      const k = Math.min(targetH / sp.h, maxW / sp.w);
+      const bob = moving ? Math.abs(Math.sin(walk))*3 : Math.sin(t*2)*1.5;
+      X.drawImage(sp.canvas, -sp.w*k/2, -sp.h*k - bob, sp.w*k, sp.h*k);
+    }
+    X.imageSmoothingEnabled = smooth;
+    return;
+  }
+  const P = b.pal, lw = 3.2/S;
+
+  X.save(); X.scale(S,S);
+  const breathe = Math.sin(t*2)*1.5;
+
+  /* ---------- wings first, they sit behind ---------- */
+  if (b.parts.wings){
+    const flap = Math.sin(moving ? walk*1.5 : t*2.1) * 0.26;
+    const wy = b.plan==='serpent' ? -44 : -46;
+    for (const s of [-1,1]){
+      X.save(); X.translate(-4, wy); X.rotate(s*(-0.32+flap));
+      X.beginPath(); X.moveTo(0,0);
+      X.quadraticCurveTo(26,-52, 74,-46);
+      X.lineTo(60,-20); X.lineTo(72,-13); X.lineTo(48,2); X.lineTo(55,11);
+      X.quadraticCurveTo(24,8, 0,0);
+      X.fillStyle=(b.mutant&&b.palB?b.palB.belly:P.belly); X.fill();
+      X.lineWidth=lw*0.8; X.strokeStyle=INK; X.stroke();
+      X.restore();
+      if(b.mutant && b.asym && b.asym.wing) break;   // one wing only
+    }
+  }
+
+  /* ---------- body plans ---------- */
+  let headX=0, headY=-60, headR=17;
+
+  if (b.plan === 'beast'){
+    const by = -34;
+    if (b.parts.tail){
+      X.beginPath(); X.strokeStyle=P.body; X.lineWidth=9; X.lineCap='round';
+      X.moveTo(-30,by+2);
+      X.quadraticCurveTo(-58,by-4+Math.sin(t*2.2)*7, -66,by-26+Math.sin(t*2.2)*9);
+      X.stroke();
+    }
+    for (const side of [1,-1]){
+      for (const off of [0,1]){
+        const p = walk + (side>0?0:Math.PI) + off*0.5;
+        const bx = (side>0?-18:22) + off*4;
+        const fx = bx + (moving?Math.sin(p)*11:0);
+        const fy = -2 - (moving?Math.max(0,Math.cos(p))*7:0);
+        limb(X,bx,by+11,16,16,fx,fy,-1,6,P.body);
+      }
+    }
+    ell(X,0,by+breathe*0.3,32,21,P.body,lw);
+    X.save(); X.globalAlpha=.9; ell(X,2,by+9,20,9,P.belly,0); X.restore();
+    headX=36; headY=by-24; headR=16;
+    lineTo(X,22,by-10,headX-4,headY+8,15,P.body);
+  }
+
+  else if (b.plan === 'serpent'){
+    X.beginPath(); X.strokeStyle=P.body; X.lineWidth=19; X.lineCap='round';
+    X.moveTo(-64,-14+Math.sin(t*1.8)*4);
+    X.bezierCurveTo(-34,-40+Math.sin(t*1.8+1)*6, -10,-6+Math.sin(t*1.8+2)*6,
+                     16,-40+Math.sin(t*1.8+3)*5);
+    X.stroke();
+    X.beginPath(); X.strokeStyle=P.belly; X.lineWidth=7; X.globalAlpha=.55;
+    X.moveTo(-60,-12+Math.sin(t*1.8)*4);
+    X.bezierCurveTo(-32,-38+Math.sin(t*1.8+1)*6, -8,-4+Math.sin(t*1.8+2)*6,
+                     14,-38+Math.sin(t*1.8+3)*5);
+    X.stroke(); X.globalAlpha=1;
+    headX=28; headY=-52; headR=15;
+  }
+
+  else if (b.plan === 'avian'){
+    const by = -52;
+    for (const s of [-1,1]){
+      const p = walk + (s>0?0:Math.PI);
+      const fx = s*7 + (moving?Math.sin(p)*10:0);
+      const fy = -2 - (moving?Math.max(0,Math.cos(p))*8:0);
+      limb(X,s*6,by+16,19,19,fx,fy,-1,5,P.accent);
+      lineTo(X,fx-4,fy,fx+7,fy,5,P.accent);
+    }
+    if (b.parts.tail){
+      X.beginPath(); X.fillStyle=P.belly;
+      X.moveTo(-14,by+6); X.lineTo(-48,by+22+Math.sin(t*2)*4); X.lineTo(-42,by-2);
+      X.closePath(); X.fill(); X.lineWidth=lw*0.8; X.strokeStyle=INK; X.stroke();
+    }
+    ell(X,0,by+breathe*0.3,21,26,P.body,lw);
+    X.save(); X.globalAlpha=.9; ell(X,3,by+8,13,14,P.belly,0); X.restore();
+    headX=8; headY=by-32; headR=14;
+    lineTo(X,4,by-18,headX,headY+8,11,P.body);
+  }
+
+  else { /* biped */
+    const hip=-40, sh=-74;
+    for (const s of [-1,1]){
+      const p = walk + (s>0?0:Math.PI);
+      const fx = s*7 + (moving?Math.sin(p)*13:0);
+      const fy = -2 - (moving?Math.max(0,Math.cos(p))*9:0);
+      limb(X,s*7,hip,21,21,fx,fy,-1,7,P.body);
+      lineTo(X,fx-4,fy,fx+8,fy,6,P.accent);
+    }
+    if (b.parts.tail){
+      X.beginPath(); X.strokeStyle=P.body; X.lineWidth=8; X.lineCap='round';
+      X.moveTo(-8,hip+2);
+      X.quadraticCurveTo(-38,hip+6+Math.sin(t*2)*6, -46,hip-16+Math.sin(t*2)*8);
+      X.stroke();
+    }
+    ell(X,0,(hip+sh)/2+breathe*0.3,19,20,P.body,lw);
+    X.save(); X.globalAlpha=.9; ell(X,2,(hip+sh)/2+6,12,10,P.belly,0); X.restore();
+    for (const s of [-1,1]){
+      const p = walk + (s>0?Math.PI:0);
+      const hx = s*24 + (moving?Math.sin(p)*10:0);
+      limb(X,s*15,sh+12,17,17,hx,hip-4,s>0?1:-1,5.5,P.body);
+    }
+    headX=2; headY=sh-16; headR=16;
+    lineTo(X,0,sh+2,headX,headY+10,9,P.body);
+  }
+
+  /* ---------- mutant seam: where the two parents meet ---------- */
+  const MB = b.mutant ? (b.palB || P) : P;
+
+  /* ---------- mane ---------- */
+  if (b.parts.mane){
+    X.save(); X.globalAlpha=.95;
+    X.beginPath(); X.fillStyle=MB.accent;
+    X.arc(headX, headY, headR*1.62, 0, 7); X.fill();
+    X.restore();
+  }
+
+  /* ---------- head ---------- */
+  ell(X, headX, headY, headR*(b.plan==='beast'?1.15:1), headR, P.body, lw);
+
+  /* ---------- head parts ---------- */
+  if (b.parts.horn){
+    X.strokeStyle=MB.accent; X.lineWidth=5; X.lineCap='round';
+    const horns = (b.mutant && b.asym && b.asym.horn) ? [0.35] : [-0.55,0.35];
+    for (const s of horns){
+      X.beginPath();
+      X.moveTo(headX+s*headR, headY-headR*0.6);
+      X.quadraticCurveTo(headX+s*headR*1.9, headY-headR*1.9,
+                         headX+s*headR*1.2, headY-headR*2.4);
+      X.stroke();
+    }
+  }
+  if (b.parts.crest){
+    X.beginPath(); X.fillStyle=P.accent;
+    X.moveTo(headX-headR*0.7, headY-headR*0.7);
+    X.quadraticCurveTo(headX, headY-headR*2.6, headX+headR*0.8, headY-headR*0.5);
+    X.closePath(); X.fill(); X.lineWidth=lw*0.7; X.strokeStyle=INK; X.stroke();
+  }
+  if (b.parts.antennae){
+    X.strokeStyle=P.accent; X.lineWidth=2.6;
+    for (const s of [-1,1]){
+      X.beginPath();
+      X.moveTo(headX+s*5, headY-headR*0.8);
+      X.quadraticCurveTo(headX+s*16, headY-headR*2.2, headX+s*9, headY-headR*2.8);
+      X.stroke();
+      X.beginPath(); X.fillStyle=P.accent;
+      X.arc(headX+s*9, headY-headR*2.9, 3, 0, 7); X.fill();
+    }
+  }
+  if (b.parts.halo){
+    X.beginPath(); X.strokeStyle='#ffe08a'; X.lineWidth=3.4;
+    X.ellipse(headX, headY-headR*2.0, headR*0.95, headR*0.26, 0, 0, 7); X.stroke();
+  }
+
+  /* ---------- spikes along the back ---------- */
+  if (b.parts.spikes){
+    X.fillStyle=MB.accent;
+    const bx0 = b.plan==='beast' ? -22 : -12, by0 = b.plan==='beast' ? -56 : -66;
+    for (let i=0;i<4;i++){
+      const sx = bx0 + i*13, sy = by0 + Math.abs(i-1.5)*3;
+      X.beginPath(); X.moveTo(sx-5,sy); X.lineTo(sx,sy-11); X.lineTo(sx+5,sy);
+      X.closePath(); X.fill(); X.lineWidth=lw*0.6; X.strokeStyle=INK; X.stroke();
+    }
+  }
+  if (b.parts.plates){
+    X.save(); X.globalAlpha=.5; X.strokeStyle=P.accent; X.lineWidth=3;
+    for (let i=0;i<3;i++){
+      X.beginPath();
+      X.arc(-6+i*11, b.plan==='beast'?-34:-52, 12, -0.9, 0.9); X.stroke();
+    }
+    X.restore();
+  }
+
+  /* ---------- face ---------- */
+  const fx = headX + headR*0.42, fy = headY - headR*0.12;
+  X.beginPath(); X.fillStyle=INK; X.arc(fx, fy, 3.1, 0, 7); X.fill();
+  X.beginPath(); X.fillStyle='#fff'; X.arc(fx+1, fy-1.1, 1.1, 0, 7); X.fill();
+  if (b.mutant){
+    // a ragged seam down the body where the two beasts were joined
+    X.save(); X.globalAlpha=.55; X.strokeStyle=MB.accent; X.lineWidth=2.2;
+    X.beginPath();
+    const sy0 = b.plan==='beast' ? -56 : -74;
+    X.moveTo(2, sy0);
+    for(let i=1;i<=6;i++) X.lineTo(2+(i%2?5:-5), sy0+i*10);
+    X.stroke(); X.restore();
+    // second eye, off-kilter and the wrong colour
+    if(b.asym && b.asym.eye){
+      X.beginPath(); X.fillStyle=MB.accent;
+      X.arc(headX+headR*0.10, headY-headR*0.52, 2.6, 0, 7); X.fill();
+    }
+    // faint glow so mutants read as unnatural
+    X.save(); X.globalAlpha=.22; X.shadowColor=MB.accent; X.shadowBlur=14;
+    X.beginPath(); X.arc(headX*0.4, headY*0.6, 34, 0, 7);
+    X.strokeStyle=MB.accent; X.lineWidth=3; X.stroke(); X.restore();
+  }
+  if (b.parts.fangs){
+    X.fillStyle='#fff';
+    for (const s of [0,1]){
+      X.beginPath();
+      const mx = headX+headR*0.62+s*5, my = headY+headR*0.42;
+      X.moveTo(mx-2,my); X.lineTo(mx+2,my); X.lineTo(mx,my+6); X.closePath(); X.fill();
+    }
+  }
+  X.restore();
+}
+
+
+/* ==================================================================
+   IMAGE PROMPTS
+   Turns a beast's actual data — its plan, element, parts and colours —
+   into a prompt you can paste into an image generator.  The art
+   direction at the end is fixed so every beast you generate comes
+   back looking like it belongs to the same world.
+   ================================================================== */
+const PLAN_WORDS = {
+  beast:  'a four-legged beast with a powerful stance',
+  serpent:'a long coiling serpent with no legs, body winding through the air',
+  avian:  'a tall bird-like creature standing on two clawed legs',
+  biped:  'an upright two-legged creature with arms'
+};
+const EL_WORDS = {
+  ember:{ mood:'smouldering and volcanic', fx:'embers drifting from its body, heat haze' },
+  tide: { mood:'deep-sea and glacial',     fx:'water beading off its scales, cold mist' },
+  gale: { mood:'swift and windswept',      fx:'wind curling around it, leaves caught in the air' },
+  stone:{ mood:'ancient and mountainous',  fx:'cracked rock plating, dust falling from it' },
+  bloom:{ mood:'overgrown and flowering',  fx:'petals and vines trailing from its limbs' },
+  shade:{ mood:'shadowed and haunting',    fx:'violet mist pooling under it, dim glow' },
+  light:{ mood:'radiant and holy',         fx:'warm golden light spilling from within' }
+};
+const PART_WORDS = {
+  horn:'curved horns', crest:'a tall bladed crest', wings:'broad feathered wings',
+  mane:'a thick flowing mane', spikes:'a row of spines down its back',
+  tail:'a long expressive tail', halo:'a floating ring of light above its head',
+  fangs:'prominent fangs', plates:'armoured plating', antennae:'slender glowing antennae'
+};
+/* image models understand colour words far better than hex codes */
+const COLOR_NAMES = [
+  ['deep crimson','#8b1a1a'],['burnt orange','#e64a19'],['warm coral','#ff8a4c'],
+  ['pale peach','#ffd0b0'],['golden yellow','#ffd54f'],['pale cream','#fff8e1'],
+  ['soft butter yellow','#fff176'],['amber','#f9a825'],['olive green','#7a8b2d'],
+  ['fresh leaf green','#9ccc65'],['pale mint','#dcedc8'],['deep forest green','#33691e'],
+  ['jade green','#26a69a'],['pale seafoam','#b2dfdb'],['deep teal','#004d40'],
+  ['sky blue','#4fc3f7'],['pale ice blue','#b3e5fc'],['deep navy','#01579b'],
+  ['periwinkle blue','#5c6bc0'],['pale lavender','#c5cae9'],['midnight blue','#1a237e'],
+  ['royal purple','#7e57c2'],['soft lilac','#d1c4e9'],['deep indigo','#311b92'],
+  ['orchid purple','#ba68c8'],['pale blush','#f3e5f5'],['dark plum','#4a148c'],
+  ['rose pink','#f48fb1'],['pale pink','#fce4ec'],['deep wine','#880e4f'],
+  ['warm taupe','#a1887f'],['pale stone grey','#d7ccc8'],['dark charcoal brown','#3e2723'],
+  ['slate grey','#90a4ae'],['pale silver','#cfd8dc'],['dark slate','#37474f'],
+  ['bone white','#fdfcf8'],['deep rust','#7a2d12']
+];
+function colorName(hex){
+  const h=hex.replace('#','');
+  const r=parseInt(h.slice(0,2),16), g=parseInt(h.slice(2,4),16), b=parseInt(h.slice(4,6),16);
+  let best=COLOR_NAMES[0], bd=1e9;
+  COLOR_NAMES.forEach(([nm,hx])=>{
+    const q=hx.replace('#','');
+    const dr=r-parseInt(q.slice(0,2),16), dg=g-parseInt(q.slice(2,4),16), db=b-parseInt(q.slice(4,6),16);
+    const d=dr*dr+dg*dg+db*db;
+    if(d<bd){ bd=d; best=[nm,hx]; }
+  });
+  return best[0];
+}
+
+const STAGE_WORDS = ['','young and small','fully grown and confident','ancient, enormous and battle-worn'];
+
+function promptFor(b){
+  const el = EL_WORDS[b.element];
+  const parts = PARTS.filter(k=>b.parts[k]).map(k=>PART_WORDS[k]);
+  const partStr = parts.length
+    ? parts.slice(0,-1).join(', ') + (parts.length>1?' and ':'') + parts[parts.length-1]
+    : 'a smooth unadorned body';
+
+  let out = 'A mystical creature named ' + b.name + ' — ' + PLAN_WORDS[b.plan] + ', '
+    + STAGE_WORDS[b.stage] + '. It is ' + el.mood + '. It has ' + partStr + '. '
+    + 'Its body is ' + colorName(b.pal.body) + ', its underside ' + colorName(b.pal.belly)
+    + ', and its horns, claws and markings are ' + colorName(b.pal.accent) + '. ' + el.fx + '.';
+
+  if (b.mutant){
+    out += ' IMPORTANT: this is a MUTANT FUSION of two different creatures'
+      + (b.lineage && b.lineage.length ? ' (' + b.lineage.join(' and ') + ')' : '')
+      + ' — it is visibly asymmetrical and wrong: mismatched halves, one side a different'
+      + ' colour from the other, a single wing or a single horn instead of a pair,'
+      + ' a ragged seam running down its body where the two creatures were joined,'
+      + ' and an extra mismatched eye. Unsettling but beautiful.';
+  }
+
+  out += ' ' + STYLES[PROMPT_STYLE].tail;
+  return out;
+}
+
+/* Three art directions.  The description of the creature stays identical
+   across all three — only the rendering instruction at the end changes,
+   which is what keeps a whole roster looking like one set.            */
+const STYLES = {
+  painted: { label:'PAINTED 2D', tail:
+    'Full body, side profile, centred, standing on nothing.'
+    + ' Painterly digital illustration, clean confident linework, soft rim lighting,'
+    + ' rich saturated colour, plain dark slate background, no text, no watermark,'
+    + ' no border, creature design sheet.' },
+
+  render3d: { label:'3D RENDER', tail:
+    'Full body, three-quarter view, centred, standing on nothing.'
+    + ' Rendered as a polished 3D character from a modern animated feature film:'
+    + ' soft subsurface scattering in the skin, believable specular highlights on'
+    + ' scales and claws, subtle ambient occlusion in every crease, shallow depth of'
+    + ' field, cinematic three-point lighting with a warm key and a cool rim light,'
+    + ' physically based materials, high-detail sculpt, Octane / Arnold quality render,'
+    + ' plain dark slate background, no text, no watermark, no border, character turnaround.' },
+
+  pixel: { label:'PIXEL ART', tail:
+    'Full body, strict side profile, centred, standing on nothing.'
+    + ' 2D pixel art game sprite, low resolution roughly 110 pixels wide,'
+    + ' chunky visible square pixels, hard pixel edges with no anti-aliasing and no'
+    + ' blur, a strict limited palette of about 24 colours, bold readable silhouette,'
+    + ' simple flat shading with one light source, in the style of a 16-bit SNES'
+    + ' role-playing game monster, transparent or plain flat background,'
+    + ' no text, no watermark, no border, no grid lines.' },
+
+  pixelwalk: { label:'PIXEL WALK CYCLE', tail:
+    'A single wide image containing FOUR separate full-body poses of this exact same'
+    + ' creature in one horizontal row, evenly spaced with clear empty gaps between'
+    + ' them, all four identical in size, colour, markings and proportions — a walk'
+    + ' cycle seen from the side: 1) contact pose with the front leg reaching forward,'
+    + ' 2) passing pose with the legs together under the body, 3) contact pose mirrored'
+    + ' with the other leg forward, 4) passing pose again. Strict side profile, the same'
+    + ' camera and the same lighting for every pose, no overlap, no pose touching'
+    + ' another. 2D pixel art game sprites, each pose roughly 110 pixels wide, chunky'
+    + ' visible square pixels, hard pixel edges with no anti-aliasing and no blur,'
+    + ' a strict limited palette of about 24 colours, bold readable silhouette,'
+    + ' 16-bit SNES role-playing game monster style, flat plain dark slate background,'
+    + ' no text, no watermark, no border, no grid lines, no numbering.' },
+
+  sheet: { label:'SPRITE SHEET', tail:
+    'A single image containing FOUR separate full-body poses of this exact same'
+    + ' creature in one horizontal row, evenly spaced, all identical in size, colour,'
+    + ' markings and proportions — a walk cycle seen from the side: 1) contact pose,'
+    + ' front leg forward, 2) passing pose, legs together under the body, 3) contact'
+    + ' pose mirrored, other leg forward, 4) passing pose again. Strict side profile,'
+    + ' identical camera and identical lighting for every pose, no overlap between'
+    + ' poses, generous even spacing, flat plain dark slate background,'
+    + ' clean cel-shaded game sprite art, crisp outlines, no text, no watermark,'
+    + ' no border, no grid lines, no numbering.' }
+};
+let PROMPT_STYLE = 'painted';
+
+/* ==================================================================
+   THE ORIGIN EVENT
+   One beast, one encounter, one save file.  It does not spawn in the
+   grass, it cannot be fused, and it cannot be caught with a charm —
+   the only way to stand beside it is to beat it at the shrine.
+   ================================================================== */
+const SHRINE = { x: 1536, y: -1120, r: 90 };
+
+function makeOrigin(){
+  const b = grow(0x0016171, {
+    plan:'biped', element:'light', level:40, rarity: ORIGIN_TIER,
+    name:'Aurethaon',
+    pal:{ body:'#fff7d6', belly:'#ffffff', accent:'#e8b93a' }
+  });
+  PARTS.forEach(k=>b.parts[k]=true);
+  b.base = { hp:340, atk:74, def:66, spd:58 };
+  b.stage = 3;
+  b.origin = true;
+  b.lineage = ['the first light'];
+  b.moves = [
+    { n:'First Dawn',     p:62, el:'light' },
+    { n:'Sunder',         p:78, el:null    },
+    { n:'Gravity Well',   p:70, el:'shade' },
+    { n:'Genesis Beam',   p:104, el:'light' }
+  ];
+  b.hp = maxHP(b);
+  return b;
+}
+
+// what you must have done before the shrine will wake
+function originReady(){
+  if(G.originDone) return false;
+  const best = G.party.reduce((a,x)=>Math.max(a, x.rarity||0), 0);
+  return G.party.length >= 12 && best >= 9;
+}
+function originProgress(){
+  const best = G.party.reduce((a,x)=>Math.max(a, x.rarity||0), 0);
+  return { beasts:G.party.length, needBeasts:12, best, needBest:9 };
+}
+
+/* ==================================================================
+   ITEMS
+   ================================================================== */
+const ITEMS = {
+  potion: { name:'Potion',  cost:6,  desc:'restores 45 HP',              icon:'✚' },
+  elixir: { name:'Elixir',  cost:16, desc:'restores a beast completely', icon:'✦' },
+  charm:  { name:'Charm',   cost:10, desc:'makes the next catch far easier', icon:'◈' },
+  ration: { name:'Ration',  cost:12, desc:'+120 XP to your lead beast',  icon:'✧' }
+};
+function itemCount(k){ return G.items[k]||0; }
+function giveItem(k,n){ G.items[k]=(G.items[k]||0)+(n||1); save(); }
+function takeItem(k){ if(!G.items[k]) return false; G.items[k]--; if(!G.items[k]) delete G.items[k]; save(); return true; }
+
+/* ==================================================================
+   ZONES — the land is divided into elemental regions, and what lives
+   in the grass depends on where you are standing.
+   ================================================================== */
+const ZONE=1024;
+function zoneAt(x,y){
+  const r=rng(((Math.floor(x/ZONE)*2654435761) ^ (Math.floor(y/ZONE)*40503))>>>0);
+  return EL[Math.floor(r()*EL.length)];
+}
+
+/* ==================================================================
+   THE WORLD
+   ================================================================== */
+const c=document.getElementById('c'), X=c.getContext('2d');
+let W,H;
+function fit(){
+  const d=devicePixelRatio||1;
+  c.width=innerWidth*d; c.height=innerHeight*d;
+  X.setTransform(d,0,0,d,0,0); W=innerWidth; H=innerHeight;
+}
+fit(); addEventListener('resize',fit);
+
+const SAVE='mystic_save_v1';
+let G = load() || { party:[], coins:12, seen:0, px:0, py:0, rev:0, items:{} };
+
+/* Every save carries a revision number.  If another tab has written a
+   newer revision than ours, we adopt it instead of overwriting it —
+   otherwise a stale tab left open would clobber a party you just
+   filled in a different tab.                                        */
+function save(){
+  try{
+    G.rev = (G.rev||0) + 1;
+    localStorage.setItem(SAVE, JSON.stringify(G));
+  }catch(e){}
+}
+function load(){ try{ return JSON.parse(localStorage.getItem(SAVE)); }catch(e){ return null; } }
+function hydrate(){
+  G.party = G.party || [];
+  G.items = G.items || {};
+  G.party.forEach(b=>{ if(!b.moves) b.moves=makeMoves(b); if(b.hp===undefined) b.hp=maxHP(b); });
+}
+function adoptNewer(){
+  const disk = load();
+  if(disk && (disk.rev||0) > (G.rev||0)){
+    G = disk; hydrate();
+
+/* ------------------------------------------------------------------
+   ASTRAEON — the single exception to the Astral rule.  The tier still
+   cannot be rolled or hunted; this one knight is granted once per save
+   and never again.  Everything else at that tier has to be fused.
+   ------------------------------------------------------------------ */
+function grantAstraeon(){
+  if(G.gotAstraeon) return;
+  const k = grow(20260823, { rarity: ASTRAL, element:'light', plan:'biped',
+                             level: 10, name:'Astraeon' });
+  k.spriteKey = 'astraeon';
+  k.hp = maxHP(k);
+  k.unique = true;
+  G.party.unshift(k);
+  G.gotAstraeon = true;
+  save();
+}
+    renderParty(); updateCoins(); updateCount();
+    return true;
+  }
+  return false;
+}
+hydrate();
+
+/* ------------------------------------------------------------------
+   ASTRAEON — the single exception to the Astral rule.  The tier still
+   cannot be rolled or hunted; this one knight is granted once per save
+   and never again.  Everything else at that tier has to be fused.
+   ------------------------------------------------------------------ */
+function grantAstraeon(){
+  if(G.gotAstraeon) return;
+  const k = grow(20260823, { rarity: ASTRAL, element:'light', plan:'biped',
+                             level: 10, name:'Astraeon' });
+  k.spriteKey = 'astraeon';
+  k.hp = maxHP(k);
+  k.unique = true;
+  G.party.unshift(k);
+  G.gotAstraeon = true;
+  save();
+}
+// another tab saved — pick it up straight away
+addEventListener('storage', e=>{ if(e.key===SAVE) adoptNewer(); });
+
+const P = { x:G.px||0, y:G.py||0, vx:0, vy:0, face:1, ph:0, moving:false, steps:0 };
+const keys={};
+addEventListener('keydown',e=>{
+  keys[e.code]=true;
+  if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
+  if(e.code==='KeyP') toggle('party');
+  if(e.code==='KeyF') toggle('fuse');
+  if(e.code==='KeyB') toggle('shop');
+  if(e.code==='Escape') closeAll();
+});
+addEventListener('keyup',e=>keys[e.code]=false);
+
+/* deterministic grass field — same world every time */
+function grassAt(gx,gy){
+  const r=rng((gx*73856093 ^ gy*19349663)>>>0);
+  return r() < 0.30;
+}
+const TILE=64;
+
+let inBattle=false;
+
+let T0=0;
+function stepWorld(dt,t){
+  T0=t;
+  if(inBattle || panelOpen()) { P.moving=false; return; }
+  let dx=(keys.ArrowRight?1:0)-(keys.ArrowLeft?1:0);
+  let dy=(keys.ArrowDown?1:0)-(keys.ArrowUp?1:0);
+  const len=Math.hypot(dx,dy)||1;
+  dx/=len; dy/=len;
+  const sp=178;
+  P.x+=dx*sp*dt; P.y+=dy*sp*dt;
+  P.moving=!!(dx||dy);
+  if(dx) P.face=dx>0?1:-1;
+  if(P.moving){
+    P.ph += dt*9;
+    P.steps += sp*dt;
+    // standing in the shrine wakes the Origin, once and only once
+    if(!G.originDone && Math.hypot(P.x-SHRINE.x, P.y-SHRINE.y) < SHRINE.r*0.55){
+      if(originReady()){ startOrigin(); return; }
+      else if(!P.shrineTold || T0-P.shrineTold > 6){
+        P.shrineTold = T0;
+        const pr=originProgress();
+        toast('The shrine is asleep — '+pr.beasts+'/'+pr.needBeasts+' beasts, best tier '+
+              RARITIES[pr.best].n+' (need Ancient)');
+      }
+    }
+    const gx=Math.floor(P.x/TILE), gy=Math.floor(P.y/TILE);
+    if(grassAt(gx,gy) && P.steps>34){
+      P.steps=0;
+      if(Math.random()<0.16) startBattle();
+    }
+  }
+}
+
+function drawWorld(t){
+  X.clearRect(0,0,W,H);
+  const camX=P.x-W/2, camY=P.y-H/2;
+  // ground
+  X.fillStyle='#0f1a17'; X.fillRect(0,0,W,H);
+  const g0x=Math.floor(camX/TILE)-1, g0y=Math.floor(camY/TILE)-1;
+  for(let gy=g0y; gy<g0y+Math.ceil(H/TILE)+3; gy++){
+    for(let gx=g0x; gx<g0x+Math.ceil(W/TILE)+3; gx++){
+      const sx=gx*TILE-camX, sy=gy*TILE-camY;
+      if(grassAt(gx,gy)){
+        X.fillStyle='#16302a'; X.fillRect(sx,sy,TILE,TILE);
+        X.strokeStyle='#1d3f36'; X.lineWidth=2; X.lineCap='round';
+        const r=rng((gx*911 ^ gy*7727)>>>0);
+        for(let i=0;i<7;i++){
+          const bx=sx+r()*TILE, by=sy+r()*TILE, h=7+r()*9;
+          const sway=Math.sin(t*1.8+bx*0.05)*2.4;
+          X.beginPath(); X.moveTo(bx,by); X.quadraticCurveTo(bx+sway,by-h*0.6,bx+sway*1.6,by-h);
+          X.stroke();
+        }
+      } else {
+        X.fillStyle=(gx+gy)%2?'#101d19':'#0e1a16'; X.fillRect(sx,sy,TILE,TILE);
+      }
+    }
+  }
+  // ---- the shrine ----
+  {
+    const sx=SHRINE.x-camX, sy=SHRINE.y-camY;
+    if(sx>-260 && sx<W+260 && sy>-260 && sy<H+260){
+      const ready=originReady(), done=G.originDone;
+      const pulse=0.5+0.5*Math.sin(t*2);
+      const col = done? '#4a5568' : ready? '#fff7d6' : '#6b7280';
+      // ground ring
+      X.save();
+      X.strokeStyle=col; X.globalAlpha=done?0.4:(ready?0.5+0.4*pulse:0.35);
+      X.lineWidth=3;
+      X.beginPath(); X.ellipse(sx,sy,SHRINE.r,SHRINE.r*0.42,0,0,7); X.stroke();
+      X.beginPath(); X.ellipse(sx,sy,SHRINE.r*0.6,SHRINE.r*0.25,0,0,7); X.stroke();
+      X.restore();
+      // pillars
+      for(let i=0;i<6;i++){
+        const a=i/6*Math.PI*2 + t*0.12;
+        const px=sx+Math.cos(a)*SHRINE.r*0.78, py=sy+Math.sin(a)*SHRINE.r*0.33;
+        const h=34+Math.sin(t*1.6+i)*4;
+        X.fillStyle=col; X.globalAlpha=done?0.35:(ready?0.9:0.5);
+        X.fillRect(px-5, py-h, 10, h);
+        X.globalAlpha=1;
+      }
+      // beam when it is awake
+      if(ready){
+        const g=X.createLinearGradient(sx,sy-420,sx,sy);
+        g.addColorStop(0,'rgba(255,247,214,0)');
+        g.addColorStop(1,'rgba(255,247,214,'+(0.16+0.12*pulse)+')');
+        X.fillStyle=g; X.fillRect(sx-30, sy-420, 60, 420);
+      }
+    }
+  }
+
+  // player
+  X.save(); X.translate(W/2, H/2);
+  X.fillStyle='rgba(0,0,0,.3)';
+  X.beginPath(); X.ellipse(0,3,15,5,0,0,7); X.fill();
+  X.scale(P.face,1);
+  drawWalker(X, P.ph, P.moving, t);
+  X.restore();
+
+  // the lead beast trails along behind
+  if(G.party.length){
+    X.save(); X.translate(W/2-46*P.face, H/2+16); X.scale(0.5*P.face,0.5);
+    X.fillStyle='rgba(0,0,0,.25)';
+    X.beginPath(); X.ellipse(0,4,26,7,0,0,7); X.fill();
+    drawBeast(X, G.party[0], t, {walk:P.ph, moving:P.moving, scale:0.62});
+    X.restore();
+  }
+}
+
+function drawWalker(X, ph, moving, t){
+  const skin='#f0c9a4', cloak='#3b6ea5';
+  const hip=-26, sh=-48;
+  for(const s of [-1,1]){
+    const p=ph+(s>0?0:Math.PI);
+    const fx=s*4+(moving?Math.sin(p)*10:0);
+    const fy=-2-(moving?Math.max(0,Math.cos(p))*7:0);
+    limb(X,s*5,hip,14,14,fx,fy,-1,5,'#2a3b52');
+  }
+  X.beginPath(); X.fillStyle=cloak;
+  X.moveTo(-13,sh+4); X.quadraticCurveTo(-17,hip+8,-9,hip+10);
+  X.lineTo(9,hip+10); X.quadraticCurveTo(17,hip+8,13,sh+4);
+  X.closePath(); X.fill(); X.lineWidth=2.6; X.strokeStyle=INK; X.stroke();
+  X.beginPath(); X.fillStyle=skin; X.arc(2,sh-11,11,0,7); X.fill();
+  X.lineWidth=2.6; X.strokeStyle=INK; X.stroke();
+  X.beginPath(); X.fillStyle='#2f2118'; X.arc(2,sh-13,11,Math.PI*1.02,Math.PI*1.98); X.fill();
+  X.beginPath(); X.fillStyle=INK; X.arc(7,sh-10,1.9,0,7); X.fill();
+}
+
+/* ==================================================================
+   BATTLE
+   ================================================================== */
+const bc=document.getElementById('bc'), BX=bc.getContext('2d');
+let foe=null, mine=null, busy=false, bt=0;
+
+function fitB(){
+  const d=devicePixelRatio||1, r=bc.parentElement.getBoundingClientRect();
+  bc.width=r.width*d; bc.height=r.height*d;
+  BX.setTransform(d,0,0,d,0,0); bc.style.width=r.width+'px'; bc.style.height=r.height+'px';
+}
+
+function wildLuckBase(){ return G.party.length * 0.05; }
+function wave2Luck(){ return wildLuckBase(); }
+function wildLevel(){
+  const best=G.party.reduce((a,b)=>Math.max(a,b.level),1);
+  return Math.max(1, best-1+Math.floor(Math.random()*4));
+}
+function startBattle(){
+  const zone = zoneAt(P.x, P.y);
+  foe = grow((Math.random()*4294967295)>>>0,
+             { level: wildLevel(),
+               element: Math.random()<0.65 ? zone : undefined,
+               luck: Math.min(2.5, wave2Luck()) });
+  foe.hp = maxHP(foe);
+  mine = G.party.find(b=>b.hp>0) || null;
+  if(!mine){ // first ever beast — you always get a starter from your first fight
+    mine = grow((Math.random()*4294967295)>>>0, { level:5 });
+    mine.hp = maxHP(mine);
+    G.party.push(mine); save();
+    log('A wild ' + foe.name + ' appears! ' + mine.name + ' steps up to defend you.');
+  } else {
+    log('A wild ' + foe.name + ' appears!');
+  }
+  CHARM=false;
+  inBattle=true;
+  document.getElementById('battle').classList.add('on');
+  fitB(); drawMoves(); updateBars();
+}
+
+let ORIGIN_FIGHT=false, originPhase=0;
+
+function startOrigin(){
+  foe = makeOrigin();
+  mine = G.party.find(b=>b.hp>0) || G.party[0];
+  ORIGIN_FIGHT = true; originPhase = 0;
+  CHARM=false; inBattle=true; busy=false; ANIM=null;
+  document.getElementById('battle').classList.add('on');
+  fitB(); drawMoves(); updateBars();
+  log('The shrine opens. AURETHAON, the first light, steps out. There is no running from this.');
+  banner8(foe);
+  document.getElementById('bcatch').style.display='none';
+  document.getElementById('brun').style.display='none';
+}
+
+/* the boss changes as it is worn down */
+function originPhases(){
+  if(!ORIGIN_FIGHT) return;
+  const frac = foe.hp/maxHP(foe);
+  if(originPhase<1 && frac<=0.66){
+    originPhase=1;
+    foe.atkBuff = 1.25;
+    log('AURETHAON sheds its armour. Its strikes come faster.');
+    toast('PHASE 2');
+    SHAKE=26; burst(POS.foe.x,POS.foe.y-40,'#fff7d6',40);
+  }
+  if(originPhase<2 && frac<=0.33){
+    originPhase=2;
+    foe.atkBuff = 1.5;
+    foe.hp = Math.min(maxHP(foe), foe.hp + Math.round(maxHP(foe)*0.12));
+    log('AURETHAON draws on the shrine itself and burns brighter.');
+    toast('PHASE 3 — it recovered');
+    SHAKE=34; burst(POS.foe.x,POS.foe.y-40,'#ffd54f',60);
+    updateBars();
+  }
+}
+
+function log(s){ document.getElementById('blog').textContent = s; }
+
+function bars(el, b, mineSide){
+  const pct = Math.max(0, b.hp/maxHP(b)*100);
+  const col = pct>50?'var(--good)':pct>22?'var(--gold)':'var(--bad)';
+  const R=rar(b);
+  el.classList.toggle('astral-card', !!R.astral);
+  el.style.borderColor = R.astral ? '' : (R.glow>0.1 ? R.c : '');
+  el.innerHTML =
+    '<div style="font-size:9px;letter-spacing:.18em;color:'+R.c+';margin-bottom:3px">'+
+      R.n.toUpperCase()+'</div>'+
+    '<div class="n"><span style="color:'+R.c+'">'+b.name+'</span><span class="lv">Lv '+b.level+
+    ' <span class="el" style="background:'+ELEMENTS[b.element].col+'22;color:'+
+    ELEMENTS[b.element].col+'">'+ELEMENTS[b.element].name+'</span></span></div>'+
+    '<div class="hpwrap"><i style="width:'+pct+'%;background:'+col+'"></i></div>'+
+    (mineSide ? '<div class="hpnum">'+Math.max(0,Math.round(b.hp))+' / '+maxHP(b)+'</div>' : '');
+}
+function updateBars(){
+  bars(document.getElementById('bfoe'), foe, false);
+  bars(document.getElementById('bme'), mine, true);
+}
+
+function eff(atkEl, defEl){
+  if(!atkEl) return 1;
+  if(STRONG[atkEl] && STRONG[atkEl].includes(defEl)) return 1.75;
+  if(STRONG[defEl] && STRONG[defEl].includes(atkEl)) return 0.55;
+  return 1;
+}
+function damage(a, d, mv){
+  const e = eff(mv.el, d.element);
+  const raw = (stat(a,'atk') * mv.p / 42) * (26/(20+stat(d,'def')));
+  const roll = 0.86 + Math.random()*0.28;
+  return { dmg: Math.max(1, Math.round(raw*e*roll)), e };
+}
+
+/* the bag and the bench both take the player's turn, same as a move */
+function showBag(){
+  if(busy||ANIM) return;
+  const el=document.getElementById('bmoves'); el.innerHTML='';
+  const keys=Object.keys(G.items).filter(k=>G.items[k]>0);
+  if(!keys.length){
+    el.innerHTML='<div style="color:var(--dim);font-size:12px;grid-column:1/-1">'+
+      'Your bag is empty. Buy supplies with B in the field.</div>';
+  }
+  keys.forEach(k=>{
+    const it=ITEMS[k];
+    const b=document.createElement('button'); b.className='mv';
+    b.innerHTML='<b>'+it.icon+' '+it.name+' ×'+G.items[k]+'</b><span>'+it.desc+'</span>';
+    b.onclick=()=>useItem(k);
+    el.appendChild(b);
+  });
+  const back=document.createElement('button'); back.className='mv';
+  back.innerHTML='<b>← Back</b><span>return to moves</span>';
+  back.onclick=drawMoves; el.appendChild(back);
+}
+function useItem(k){
+  if(busy||ANIM) return;
+  if(!takeItem(k)) return;
+  if(k==='potion'){ mine.hp=Math.min(maxHP(mine), mine.hp+45); log(mine.name+' recovered 45 HP.'); }
+  if(k==='elixir'){ mine.hp=maxHP(mine); log(mine.name+' is fully restored.'); }
+  if(k==='charm'){ CHARM=true; log('A charm glimmers — the next catch will be far easier.'); }
+  if(k==='ration'){ gainXP(mine,120); log(mine.name+' ate a ration. +120 XP'); }
+  updateBars(); drawMoves(); busy=true;
+  setTimeout(()=>{ if(foe.hp>0) foeTurn(); else busy=false; }, 620);
+}
+let CHARM=false;
+
+function showBench(){
+  if(busy||ANIM) return;
+  const el=document.getElementById('bmoves'); el.innerHTML='';
+  const others=G.party.filter(b=>b!==mine);
+  if(!others.length){
+    el.innerHTML='<div style="color:var(--dim);font-size:12px;grid-column:1/-1">'+
+      'You have no one else to send in.</div>';
+  }
+  others.forEach(b=>{
+    const btn=document.createElement('button'); btn.className='mv';
+    const pct=Math.round(b.hp/maxHP(b)*100);
+    btn.innerHTML='<b>'+b.name+'</b><span>Lv '+b.level+' · '+ELEMENTS[b.element].name+
+      ' · '+(b.hp>0? pct+'% HP' : 'spent')+'</span>';
+    btn.disabled = b.hp<=0;
+    if(b.hp<=0) btn.style.opacity=.4;
+    else btn.onclick=()=>{
+      mine=b; log('Go, '+mine.name+'!');
+      updateBars(); drawMoves(); busy=true;
+      setTimeout(()=>{ if(foe.hp>0) foeTurn(); else busy=false; }, 620);
+    };
+    el.appendChild(btn);
+  });
+  const back=document.createElement('button'); back.className='mv';
+  back.innerHTML='<b>← Back</b><span>return to moves</span>';
+  back.onclick=drawMoves; el.appendChild(back);
+}
+
+function drawMoves(){
+  const el=document.getElementById('bmoves'); el.innerHTML='';
+  mine.moves.forEach(mv=>{
+    const b=document.createElement('button'); b.className='mv';
+    const e = eff(mv.el, foe.element);
+    b.innerHTML='<b>'+mv.n+'</b><span>power '+mv.p+
+      (mv.el?' · '+ELEMENTS[mv.el].name:'')+
+      (e>1?' · strong':e<1?' · weak':'')+'</span>';
+    b.onclick=()=>playerMove(mv);
+    el.appendChild(b);
+  });
+}
+
+function playerMove(mv){
+  if(busy || ANIM) return; busy=true;
+  const r = damage(mine, foe, mv);
+  const col = mv.el ? ELEMENTS[mv.el].col : '#e8eef6';
+  log(mine.name+' used '+mv.n+'!');
+  performAttack(mine, foe, 'me', mv,
+    ()=>{
+      foe.hp -= r.dmg;
+      SHAKE = r.e>1 ? 20 : 12; FLASH='foe';
+      burst(POS.foe.x, POS.foe.y-40, col, r.e>1?28:18);
+      floatText(POS.foe.x, POS.foe.y-70, '-'+r.dmg, r.e>1?'#ffd54f':'#f87171');
+      log(mine.name+' used '+mv.n+'! '+(r.e>1?"It's super effective! ":r.e<1?"Not very effective. ":'')+r.dmg+' damage.');
+      updateBars(); originPhases();
+    },
+    ()=>{ if(foe.hp<=0){ winBattle(); return; } foeTurn(); });
+}
+function foeTurn(){
+  const mv = foe.moves[Math.floor(Math.random()*foe.moves.length)];
+  const r = damage(foe, mine, mv);
+  const col = mv.el ? ELEMENTS[mv.el].col : '#e8eef6';
+  log('Wild '+foe.name+' used '+mv.n+'!');
+  performAttack(foe, mine, 'foe', mv,
+    ()=>{
+      mine.hp -= r.dmg;
+      SHAKE = r.e>1 ? 20 : 12; FLASH='me';
+      burst(POS.me.x, POS.me.y-40, col, r.e>1?28:18);
+      floatText(POS.me.x, POS.me.y-70, '-'+r.dmg, r.e>1?'#ffd54f':'#f87171');
+      log('Wild '+foe.name+' used '+mv.n+'! '+(r.e>1?"It's super effective! ":'')+r.dmg+' damage.');
+      updateBars();
+    },
+    ()=>{
+    if(mine.hp<=0){
+      mine.hp=0;
+      const next=G.party.find(b=>b.hp>0);
+      if(next){ mine=next; log(mine.name+' steps in!'); drawMoves(); updateBars(); busy=false; }
+      else if(ORIGIN_FIGHT){
+        ORIGIN_FIGHT=false;
+        document.getElementById('bcatch').style.display='';
+        document.getElementById('brun').style.display='';
+        log('AURETHAON turns away. The shrine remains — come back stronger.');
+        setTimeout(()=>{ G.party.forEach(b=>b.hp=maxHP(b));
+                         P.x=SHRINE.x-260; P.y=SHRINE.y+240; endBattle(); },2000);
+      }
+      else { log('All your beasts are spent. You retreat and rest.');
+             setTimeout(()=>{ G.party.forEach(b=>b.hp=maxHP(b)); endBattle(); },1300); }
+    } else busy=false;
+  });
+}
+
+function winBattle(){
+  if(ORIGIN_FIGHT){
+    ORIGIN_FIGHT=false;
+    G.originDone = true;
+    foe.hp = maxHP(foe);
+    G.party.push(foe);
+    gainXP(mine, 900);
+    G.coins += 250;
+    log('AURETHAON kneels. The shrine goes dark for good — and it walks with you now.');
+    toast('ORIGIN — Aurethaon is yours. There will not be another.');
+    banner8(foe);
+    document.getElementById('bcatch').style.display='';
+    document.getElementById('brun').style.display='';
+    save(); renderParty();
+    setTimeout(endBattle, 3000);
+    return;
+  }
+  const gain = 14 + foe.level*6;
+  const coins = 3 + Math.floor(Math.random()*5);
+  G.coins += coins;
+  gainXP(mine, gain);
+  // beating a beast earns it — it recovers and joins you
+  foe.hp = maxHP(foe);
+  G.party.push(foe);
+  log('Wild '+foe.name+' is defeated and joins you! +'+gain+' XP, +'+coins+' ◈');
+  toast(rar(foe).n.toUpperCase()+' '+foe.name+' joined your party');
+  if((foe.rarity||0) >= 8) banner8(foe);
+  save(); renderParty();
+  setTimeout(endBattle, 1800);
+}
+function gainXP(b, n){
+  b.xp += n;
+  const need = ()=> 26 + b.level*13;
+  while(b.xp >= need()){
+    b.xp -= need(); b.level++;
+    b.hp = maxHP(b);
+    const was=b.stage;
+    if(b.level>=26) b.stage=3; else if(b.level>=12) b.stage=2;
+    if(b.stage!==was) toast(b.name+' evolved! Stage '+b.stage);
+    else toast(b.name+' reached level '+b.level);
+  }
+}
+function endBattle(){
+  inBattle=false; busy=false;
+  document.getElementById('battle').classList.remove('on');
+  save(); renderParty();
+}
+document.getElementById('bbag').onclick=showBag;
+document.getElementById('bswap').onclick=showBench;
+document.getElementById('brun').onclick=()=>{ if(!busy){ log('You slipped away.'); setTimeout(endBattle,500); } };
+document.getElementById('bcatch').onclick=()=>{
+  if(busy) return;
+  if(G.coins<3){ toast('Need 3 ◈ to try a catch'); return; }
+  busy=true; G.coins-=3; updateCoins();
+  const odds = Math.min(0.96, 0.30 + (1 - foe.hp/maxHP(foe))*0.55 + (CHARM?0.4:0));
+  CHARM=false;
+  if(Math.random()<odds){
+    foe.hp = maxHP(foe);
+    G.party.push(foe);
+    log('You caught '+foe.name+' without beating it!');
+    save(); renderParty();
+    setTimeout(endBattle,1200);
+  } else {
+    log('It broke free!');
+    setTimeout(foeTurn,700);
+  }
+};
+
+/* ---------- attack effects ----------
+   An attack plays out over about a second: the attacker lunges, a bolt
+   of its element crosses the gap, and on impact the target flashes,
+   the screen kicks, and the damage number floats off.               */
+let FX=[], SHAKE=0, ANIM=null, FLASH=null;
+const POS={ foe:{x:0,y:0}, me:{x:0,y:0} };
+
+function performAttack(a,d,side,mv,onImpact,onDone){
+  ANIM={ a,d,side,mv,t:0,applied:false,onImpact,onDone };
+}
+function burst(x,y,col,n){
+  for(let i=0;i<(n||18);i++){
+    const ang=Math.random()*7, sp=60+Math.random()*190;
+    FX.push({ x,y, vx:Math.cos(ang)*sp, vy:Math.sin(ang)*sp-60,
+              life:.45+Math.random()*.35, max:.8, r:2+Math.random()*3.5, col });
+  }
+}
+function floatText(x,y,txt,col){ FX.push({ text:true,x,y,txt,col,life:1.1,max:1.1 }); }
+
+function stepFX(dt){
+  SHAKE *= Math.pow(0.0015, dt);
+  if(FLASH){ FLASH.t-=dt; if(FLASH.t<=0) FLASH=null; }
+  FX = FX.filter(f=>{
+    f.life -= dt;
+    if(f.text) f.y -= 34*dt;
+    else { f.x += f.vx*dt; f.y += f.vy*dt; f.vy += 300*dt; }
+    return f.life>0;
+  });
+  if(ANIM){
+    ANIM.t += dt;
+    if(!ANIM.applied && ANIM.t >= 0.44){
+      ANIM.applied = true;
+      if(ANIM.onImpact) ANIM.onImpact();
+    }
+    if(ANIM.t > 1.05){ const d=ANIM.onDone; ANIM=null; if(d) d(); }
+  }
+}
+
+function drawFX(BX){
+  FX.forEach(f=>{
+    const k = f.life/f.max;
+    BX.globalAlpha = Math.max(0,k);
+    if(f.text){
+      BX.font='700 22px ui-monospace,Menlo,monospace';
+      BX.textAlign='center'; BX.fillStyle=f.col;
+      BX.fillText(f.txt, f.x, f.y);
+    } else {
+      BX.beginPath(); BX.fillStyle=f.col;
+      BX.arc(f.x, f.y, f.r*k, 0, 7); BX.fill();
+    }
+  });
+  BX.globalAlpha=1; BX.textAlign='left';
+}
+
+function drawBattle(t, dt){
+  stepFX(dt||0);
+  // the tallest a beast may be drawn on this stage
+  SPRITE_CAP = bc.parentElement.getBoundingClientRect().height * 0.46;
+  const r=bc.parentElement.getBoundingClientRect();
+  BX.clearRect(0,0,r.width,r.height);
+  const g=BX.createLinearGradient(0,0,0,r.height);
+  g.addColorStop(0,'#16202c'); g.addColorStop(1,'#0d141b');
+  BX.fillStyle=g; BX.fillRect(0,0,r.width,r.height);
+  BX.strokeStyle='#1e2a37'; BX.lineWidth=2;
+  BX.beginPath(); BX.moveTo(0,r.height*0.72); BX.lineTo(r.width,r.height*0.72); BX.stroke();
+
+  if(!foe||!mine) return;
+  POS.foe.x=r.width*0.32; POS.foe.y=r.height*0.36;
+  POS.me.x =r.width*0.70; POS.me.y =r.height*0.66;
+
+  // screen kick
+  BX.save();
+  if(SHAKE>0.4) BX.translate((Math.random()-.5)*SHAKE,(Math.random()-.5)*SHAKE);
+
+  // how far each side has lunged toward the other
+  let lungeF=0, lungeM=0, atkF=null, atkM=null;
+  if(ANIM){
+    // wind up slowly, strike fast, recover — rather than a flat in-and-out
+    const raw = Math.min(1, ANIM.t/0.95);
+    const eased = raw<0.46 ? Math.pow(raw/0.46,1.9)*0.55 : 0.55+Math.pow((raw-0.46)/0.54,0.6)*0.45;
+    const k = ANIM.t<0.44 ? ANIM.t/0.44 : Math.max(0,(1.05-ANIM.t)/0.61);
+    const push = Math.sin(Math.min(1,k)*Math.PI)*40;
+    if(ANIM.side==='me'){ lungeM=push; atkM=eased; } else { lungeF=push; atkF=eased; }
+  }
+
+  // foe, upper left, facing right
+  BX.save(); BX.translate(r.width*0.32+lungeF, r.height*0.36+lungeF*0.5);
+  BX.fillStyle='rgba(0,0,0,.28)';
+  BX.beginPath(); BX.ellipse(0,6,44,10,0,0,7); BX.fill();
+  if(FLASH==='foe'){ BX.globalAlpha=.85; }
+  drawBeast(BX, foe, t, {scale:0.92, attack:atkF});
+  BX.globalAlpha=1;
+  BX.restore();
+  // mine, lower right, mirrored
+  BX.save(); BX.translate(r.width*0.70-lungeM, r.height*0.66-lungeM*0.5); BX.scale(-1.18,1.18);
+  BX.fillStyle='rgba(0,0,0,.28)';
+  BX.beginPath(); BX.ellipse(0,6,44,10,0,0,7); BX.fill();
+  drawBeast(BX, mine, t, {scale:0.92, attack:atkM});
+  BX.restore();
+
+  // the bolt crossing the gap
+  if(ANIM && ANIM.t>0.14 && ANIM.t<0.50){
+    const k=(ANIM.t-0.14)/0.36;
+    const from = ANIM.side==='me' ? POS.me : POS.foe;
+    const to   = ANIM.side==='me' ? POS.foe : POS.me;
+    const bx = from.x+(to.x-from.x)*k, by = from.y-40+(to.y-40-(from.y-40))*k;
+    const col = ANIM.mv.el ? ELEMENTS[ANIM.mv.el].col : '#e8eef6';
+    BX.save(); BX.shadowColor=col; BX.shadowBlur=22;
+    for(let i=0;i<4;i++){
+      const kk=Math.max(0,k-i*0.05);
+      const tx=from.x+(to.x-from.x)*kk, ty=from.y-40+(to.y-40-(from.y-40))*kk;
+      BX.globalAlpha=(1-i*0.22)*0.9;
+      BX.beginPath(); BX.fillStyle=col; BX.arc(tx,ty,11-i*2,0,7); BX.fill();
+    }
+    BX.restore(); BX.globalAlpha=1;
+  }
+
+  drawFX(BX);
+  BX.restore();
+}
+
+/* ==================================================================
+   PANELS: party, fusion
+   ================================================================== */
+function toggle(id){
+  const el=document.getElementById(id);
+  const was=el.classList.contains('on');
+  closeAll();
+  if(!was && !inBattle){
+    el.classList.add('on');
+    if(id==='party') renderParty();
+    else if(id==='fuse') renderFuse();
+    else if(id==='shop') renderShop();
+  }
+}
+function closeAll(){ document.querySelectorAll('.panel').forEach(p=>p.classList.remove('on')); }
+function panelOpen(){ return !!document.querySelector('.panel.on'); }
+document.querySelectorAll('.close').forEach(b=>b.onclick=()=>closeAll());
+
+function thumbCanvas(b, w, h){
+  const t=document.createElement('canvas');
+  const d=devicePixelRatio||1;
+  t.width=w*d; t.height=h*d;
+  const tx=t.getContext('2d'); tx.setTransform(d,0,0,d,0,0);
+  tx.save(); tx.translate(w/2, h*0.78); tx.scale(0.46,0.46);
+  drawBeast(tx, b, 0, {scale:1});
+  tx.restore();
+  return t;
+}
+function card(b, i, onclick){
+  const d=document.createElement('div'); d.className='card';
+  const cv=thumbCanvas(b,150,84); cv.style.width='100%'; cv.style.height='84px';
+  d.appendChild(cv);
+  const nm=document.createElement('div'); nm.className='nm'; nm.textContent=b.name;
+  nm.title='click to rename — art is loaded from refs/<name>.png';
+  nm.style.cursor='text';
+  nm.onclick=ev=>{
+    ev.stopPropagation();
+    const v=prompt('Name this beast (art loads from refs/<name>.png)', b.name);
+    if(v && v.trim()){
+      b.name=v.trim().replace(/[^A-Za-z0-9 _-]/g,'');
+      save(); renderParty();
+      toast('Renamed to '+b.name+' — looking for refs/'+b.name.toLowerCase()+'.png');
+    }
+  };
+  const mt=document.createElement('div'); mt.className='mt';
+  const R=rar(b);
+  mt.innerHTML='<span style="color:'+R.c+'">'+R.n.toUpperCase()+'</span>'+
+    '<span class="el" style="background:'+ELEMENTS[b.element].col+'22;color:'+
+    ELEMENTS[b.element].col+'">'+ELEMENTS[b.element].name+'</span>';
+  nm.style.color=R.c;
+  if(R.astral){ nm.classList.add('astral'); d.classList.add('astral-card'); }
+  else if(R.glow>0.3) d.style.boxShadow='0 0 '+(10+R.glow*22)+'px '+R.c+
+    Math.round(R.glow*90).toString(16).padStart(2,'0');
+  d.style.borderColor=R.glow>0.1 ? R.c : '';
+  const lvl=document.createElement('div'); lvl.className='mt';
+  lvl.innerHTML='<span>Lv '+b.level+' · stage '+b.stage+'</span>';
+  d.appendChild(nm); d.appendChild(mt); d.appendChild(lvl);
+  if(onclick) d.onclick=()=>onclick(d,i);
+  else {
+    const rb=document.createElement('button');
+    rb.className='btn alt'; rb.style.cssText='width:100%;margin-top:8px;padding:7px;font-size:10px';
+    rb.textContent='RENAME';
+    rb.onclick=ev=>{
+      ev.stopPropagation();
+      const v=prompt('Name this beast.\n\nArt is loaded from refs/<name>.png — so naming it Calnyxys loads your dragon.', b.name);
+      if(v && v.trim()){
+        b.name=v.trim().replace(/[^A-Za-z0-9 _-]/g,'');
+        save(); renderParty();
+        toast('Renamed to '+b.name);
+      }
+    };
+    d.appendChild(rb);
+
+    const pb=document.createElement('button');
+    pb.className='btn alt'; pb.style.cssText='width:100%;margin-top:6px;padding:7px;font-size:10px';
+    pb.textContent='COPY IMAGE PROMPT';
+    pb.onclick=ev=>{
+      ev.stopPropagation();
+      const txt=promptFor(b);
+      navigator.clipboard.writeText(txt).then(
+        ()=>toast('Prompt for '+b.name+' copied'),
+        ()=>{ showPrompt(txt); });
+    };
+    d.appendChild(pb);
+  }
+  return d;
+}
+function renderStyles(){
+  const el=document.getElementById('stylepick'); if(!el) return;
+  el.innerHTML='';
+  Object.keys(STYLES).forEach(k=>{
+    const b=document.createElement('button');
+    b.className='btn alt'; b.style.cssText='padding:7px 12px;font-size:10px'+
+      (PROMPT_STYLE===k?';background:#e8eef6;color:#0d1117':'');
+    b.textContent=STYLES[k].label;
+    b.onclick=()=>{ PROMPT_STYLE=k; renderStyles(); };
+    el.appendChild(b);
+  });
+}
+function detailSheet(b, idx){
+  let el=document.getElementById('detail');
+  if(el) el.remove();
+  el=document.createElement('div'); el.id='detail';
+  el.style.cssText='position:fixed;inset:0;background:rgba(4,8,12,.86);z-index:70;'+
+    'display:flex;align-items:center;justify-content:center;padding:20px';
+  const box=document.createElement('div');
+  box.style.cssText='background:var(--panel);border:1px solid var(--line);border-radius:16px;'+
+    'padding:22px;width:min(420px,94vw);max-height:88vh;overflow-y:auto';
+  const need = 26 + b.level*13;
+  const pct = Math.min(100, b.xp/need*100);
+  const bar = (k,v,max)=>'<div style="display:flex;justify-content:space-between;font-size:11px;'+
+    'color:var(--dim);margin-top:10px"><span>'+k+'</span><span style="color:var(--ink)">'+v+'</span></div>'+
+    '<div style="height:5px;background:#0b1119;border-radius:3px;margin-top:4px;overflow:hidden">'+
+    '<i style="display:block;height:100%;width:'+Math.min(100,v/max*100)+'%;background:'+
+    ELEMENTS[b.element].col+'"></i></div>';
+  box.innerHTML =
+    '<div style="font-size:10px;letter-spacing:.2em;color:'+rar(b).c+'">'+
+      rar(b).n.toUpperCase()+' · ×'+rar(b).m.toFixed(2)+' STATS</div>'+
+    '<div style="font-size:20px;font-weight:700;margin-top:5px;color:'+rar(b).c+'">'+b.name+'</div>'+
+    '<div style="font-size:11px;color:var(--dim);margin-top:4px">'+
+      b.plan+' · stage '+b.stage+' · Lv '+b.level+
+      (b.mutant?' · <span style="color:var(--gold)">MUTANT</span>':'')+'</div>'+
+    (b.lineage&&b.lineage.length?'<div style="font-size:11px;color:var(--dim);margin-top:6px">'+
+      'fused from '+b.lineage.join(' + ')+'</div>':'')+
+    '<div style="margin-top:16px;font-size:11px;color:var(--dim)">XP to next level</div>'+
+    '<div style="height:5px;background:#0b1119;border-radius:3px;margin-top:5px;overflow:hidden">'+
+    '<i style="display:block;height:100%;width:'+pct+'%;background:var(--good)"></i></div>'+
+    '<div style="font-size:10px;color:var(--dim);margin-top:4px">'+b.xp+' / '+need+'</div>'+
+    bar('HP', maxHP(b), 260)+bar('ATTACK', stat(b,'atk'), 90)+
+    bar('DEFENCE', stat(b,'def'), 90)+bar('SPEED', stat(b,'spd'), 90)+
+    '<div style="margin-top:18px;font-size:11px;letter-spacing:.2em;color:var(--dim)">MOVES</div>'+
+    b.moves.map(m=>'<div style="display:flex;justify-content:space-between;font-size:12px;'+
+      'padding:9px 0;border-bottom:1px solid var(--line)"><span>'+m.n+'</span>'+
+      '<span style="color:var(--dim)">pow '+m.p+(m.el?' · '+ELEMENTS[m.el].name:'')+'</span></div>').join('')+
+    '<div style="margin-top:18px;font-size:11px;letter-spacing:.2em;color:var(--dim)">PARTS</div>'+
+    '<div style="font-size:12px;margin-top:8px;color:#cfd8e6">'+
+      (PARTS.filter(k=>b.parts[k]).join(', ')||'none')+'</div>';
+  const row=document.createElement('div'); row.className='rowbtn';
+  const lead=document.createElement('button'); lead.className='btn';
+  lead.textContent='MAKE LEAD';
+  lead.onclick=()=>{ G.party.splice(idx,1); G.party.unshift(b); save(); renderParty();
+                     el.remove(); toast(b.name+' leads the party'); };
+  const rel=document.createElement('button'); rel.className='btn alt';
+  rel.textContent='RELEASE';
+  rel.onclick=()=>{ if(confirm('Release '+b.name+' for good?')){
+      G.party.splice(idx,1); save(); renderParty(); el.remove(); toast(b.name+' was released'); } };
+  const cls=document.createElement('button'); cls.className='btn alt';
+  cls.textContent='CLOSE'; cls.onclick=()=>el.remove();
+  row.appendChild(lead); row.appendChild(rel); row.appendChild(cls);
+  box.appendChild(row);
+  el.appendChild(box);
+  el.onclick=ev=>{ if(ev.target===el) el.remove(); };
+  document.body.appendChild(el);
+}
+
+function renderParty(){
+  renderStyles();
+  const g=document.getElementById('pgrid'); g.innerHTML='';
+  document.getElementById('pcount').textContent=G.party.length;
+  if(!G.party.length){
+    g.innerHTML='<div style="color:#7d8a9c;font-size:12px;line-height:1.8;grid-column:1/-1">'+
+      'You have no beasts yet.<br>Close this panel and walk into the tall grass — '+
+      'the first one you meet becomes yours.</div>';
+  }
+  G.party.forEach((b,i)=>{
+    const el=card(b,i);
+    el.querySelector('canvas').style.cursor='pointer';
+    el.querySelector('canvas').onclick=()=>detailSheet(b,i);
+    el.querySelector('canvas').title='view stats';
+    g.appendChild(el);
+  });
+  updateCoins(); updateCount();
+}
+let picks=[];
+function renderFuse(){
+  picks=[];
+  const g=document.getElementById('fgrid'); g.innerHTML='';
+  G.party.forEach((b,i)=>{
+    if(b.unique) return;               // Astraeon cannot be fused away
+    const el=card(b,i,(node,idx)=>{
+      const at=picks.indexOf(idx);
+      if(at>=0){ picks.splice(at,1); node.classList.remove('sel'); }
+      else if(picks.length<2){ picks.push(idx); node.classList.add('sel'); }
+      refreshFuseBtn();
+    });
+    g.appendChild(el);
+  });
+  refreshFuseBtn();
+}
+/* the button explains itself rather than failing quietly */
+function refreshFuseBtn(){
+  const btn=document.getElementById('dofuse'), hint=document.getElementById('fhint');
+  if(!btn) return;
+  if(G.party.length<2){
+    btn.disabled=true; btn.textContent='NEED 2 BEASTS';
+    hint.textContent='you have '+G.party.length+' — go win another fight';
+  } else if(picks.length<2){
+    btn.disabled=true; btn.textContent='PICK '+(2-picks.length)+' MORE';
+    hint.textContent='tap two beasts above';
+  } else if(G.coins<8){
+    btn.disabled=true; btn.textContent='NEED 8 ◈ — YOU HAVE '+G.coins;
+    hint.textContent='win fights to earn ◈';
+  } else {
+    btn.disabled=false; btn.textContent='FUSE — 8 ◈';
+    hint.textContent='both parents are consumed';
+  }
+}
+
+document.getElementById('dofuse').onclick=()=>{
+  if(picks.length!==2) return;
+  if(G.coins<8){ toast('Fusion costs 8 ◈'); return; }
+  const [a,b] = picks.map(i=>G.party[i]);
+  const child = fuseBeasts(a,b);
+  G.coins-=8;
+  G.party = G.party.filter((_,i)=>!picks.includes(i));
+  G.party.push(child);
+  save(); renderFuse(); updateCoins(); updateCount();
+  toast(a.name+' + '+b.name+' became '+child.name+'!');
+};
+
+/* the fusion itself: a child seed built from both parents, then parts
+   and colours drawn from whichever parent the child's own RNG picks */
+function fuseBeasts(a,b){
+  const seed = ((a.seed ^ (b.seed<<1)) + 0x5f3a ) >>> 0;
+  const r = rng(seed);
+  const child = grow(seed, {
+    plan: r()<0.5 ? a.plan : b.plan,
+    element: r()<0.5 ? a.element : b.element,
+    level: Math.max(1, Math.floor((a.level+b.level)/2)),
+    pal: {
+      body:   r()<0.5 ? a.pal.body   : b.pal.body,
+      belly:  r()<0.5 ? a.pal.belly  : b.pal.belly,
+      accent: r()<0.5 ? a.pal.accent : b.pal.accent
+    },
+    name: (a.name.slice(0, Math.max(2,Math.ceil(a.name.length/2))) +
+           b.name.slice(Math.floor(b.name.length/2))).replace(/^./,ch=>ch.toUpperCase()),
+    lineage: [a.name, b.name]
+  });
+  // A fusion is a MUTANT: it keeps almost everything either parent had,
+  // and sometimes grows a part neither of them ever carried.
+  PARTS.forEach(p=>{
+    const either = a.parts[p] || b.parts[p];
+    child.parts[p] = either ? (r() < 0.88) : (r() < 0.22);
+  });
+  child.mutant = true;
+  // the second parent's colours are kept so the body can be two-toned
+  child.palB = { body:b.pal.body, belly:b.pal.belly, accent:b.pal.accent };
+  // mutants grow lopsided — one horn, one wing, mismatched eyes
+  child.asym = { horn:r()<0.65, wing:r()<0.55, eye:r()<0.7 };
+  child.build = Math.min(1.45, (a.build+b.build)/2 * 1.1);
+  // a fusion inherits the better parent's tier and can push one higher,
+  // but never past Genesis by ordinary means
+  const top = Math.max(a.rarity||0, b.rarity||0);
+  child.rarity = Math.min(TOP_ROLLABLE, top + (r()<0.28 ? 1 : 0));
+  // the one exception: two Genesis parents have a 12% chance at ASTRAL
+  if((a.rarity||0)===TOP_ROLLABLE && (b.rarity||0)===TOP_ROLLABLE && r()<0.12){
+    child.rarity = ASTRAL;
+  }
+  // Origin can never be reached by fusing, no matter the parents
+  if(child.rarity >= ORIGIN_TIER) child.rarity = ASTRAL;
+  // and the one that exists cannot be used as breeding stock
+  if(a.origin || b.origin) child.rarity = Math.min(child.rarity, ASTRAL);
+  // fusion bonus: the child is stronger than the average of its parents
+  ['hp','atk','def','spd'].forEach(k=>{
+    child.base[k] = Math.round((a.base[k]+b.base[k])/2 * 1.12);
+  });
+  child.moves = makeMoves(child);
+  child.hp = maxHP(child);
+  return child;
+}
+
+function renderShop(){
+  const g=document.getElementById('sgrid'); g.innerHTML='';
+  Object.keys(ITEMS).forEach(k=>{
+    const it=ITEMS[k];
+    const d=document.createElement('div'); d.className='card';
+    d.innerHTML='<div style="font-size:30px;text-align:center;padding:12px 0">'+it.icon+'</div>'+
+      '<div class="nm">'+it.name+'</div>'+
+      '<div class="mt"><span>'+it.desc+'</span></div>'+
+      '<div class="mt" style="margin-top:8px"><span>have '+itemCount(k)+'</span>'+
+      '<span style="color:var(--gold)">◈ '+it.cost+'</span></div>';
+    const b=document.createElement('button');
+    b.className='btn alt'; b.style.cssText='width:100%;margin-top:9px;padding:8px;font-size:10px';
+    b.textContent = G.coins>=it.cost ? 'BUY' : 'NEED ◈ '+(it.cost-G.coins)+' MORE';
+    b.disabled = G.coins<it.cost;
+    b.onclick=()=>{ G.coins-=it.cost; giveItem(k,1); updateCoins(); renderShop(); toast('Bought a '+it.name); };
+    d.appendChild(b);
+    g.appendChild(d);
+  });
+  updateCoins();
+}
+
+function banner8(b){
+  const R=rar(b);
+  const el=document.createElement('div');
+  el.style.cssText='position:fixed;left:50%;top:26%;transform:translateX(-50%);z-index:75;'+
+    'font-size:clamp(20px,4vw,34px);font-weight:800;letter-spacing:.16em;color:'+R.c+';'+
+    'text-shadow:0 0 26px '+R.c+';pointer-events:none;transition:opacity 1.4s';
+  el.textContent = R.n.toUpperCase()+'!';
+  document.body.appendChild(el);
+  setTimeout(()=>{ el.style.opacity=0; setTimeout(()=>el.remove(),1500); }, 900);
+}
+
+function updateCoins(){ document.getElementById('coins').textContent = G.coins; }
+function updateCount(){
+  const el=document.getElementById('hcount');
+  if(el) el.textContent = G.party.length;
+}
+function updateShrine(){
+  const el=document.getElementById('hshrine');
+  if(!el) return;
+  if(G.originDone){ el.innerHTML='<span style="color:#fff7d6">the shrine is spent</span>'; return; }
+  const d=Math.round(Math.hypot(P.x-SHRINE.x, P.y-SHRINE.y));
+  const pr=originProgress();
+  const ready=originReady();
+  const dir=(()=>{
+    const a=Math.atan2(SHRINE.y-P.y, SHRINE.x-P.x);
+    const names=['E','SE','S','SW','W','NW','N','NE'];
+    return names[(Math.round(a/(Math.PI/4))+8)%8];
+  })();
+  el.innerHTML = ready
+    ? '<span style="color:#fff7d6">◈ the shrine is awake — '+d+'m '+dir+'</span>'
+    : '<span style="color:#5f6b7a">shrine sealed · '+pr.beasts+'/12 beasts · best '+
+      RARITIES[pr.best].n+'/Ancient · '+d+'m '+dir+'</span>';
+}
+
+function updateZone(){
+  const el=document.getElementById('hzone');
+  if(el){
+    const z=zoneAt(P.x,P.y);
+    el.textContent=ELEMENTS[z].name;
+    el.style.color=ELEMENTS[z].col;
+  }
+}
+function showPrompt(txt){
+  let el=document.getElementById('promptbox');
+  if(!el){
+    el=document.createElement('div'); el.id='promptbox';
+    el.style.cssText='position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);'+
+      'width:min(620px,92vw);background:#151b24;border:1px solid #232c39;border-radius:14px;'+
+      'padding:18px;z-index:80';
+    el.innerHTML='<div style="font-size:10px;letter-spacing:.2em;color:#7d8a9c;margin-bottom:10px">'+
+      'IMAGE PROMPT — SELECT AND COPY</div>'+
+      '<textarea id="ptext" readonly style="width:100%;height:200px;background:#0b1119;'+
+      'color:#e8eef6;border:1px solid #232c39;border-radius:9px;padding:12px;font-size:12px;'+
+      'font-family:inherit;line-height:1.6;resize:none"></textarea>'+
+      '<button class="btn" style="margin-top:12px" onclick="this.parentElement.remove()">CLOSE</button>';
+    document.body.appendChild(el);
+  }
+  const ta=el.querySelector('#ptext'); ta.value=txt; ta.select();
+}
+let toastT=0;
+function toast(s){
+  const el=document.getElementById('toast');
+  el.textContent=s; el.classList.add('on');
+  clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove('on'), 2400);
+}
+
+/* ==================================================================
+   LOOP
+   ================================================================== */
+let last=performance.now(), T=0;
+(function loop(now){
+  const dt=Math.min(.033,(now-last)/1000); last=now; T+=dt;
+  if(inBattle) drawBattle(T, dt);
+  else { SPRITE_CAP = 0; stepWorld(dt,T); drawWorld(T); if(((T*4)|0)%2===0){ updateZone(); updateShrine(); } }
+  requestAnimationFrame(loop);
+})(last);
+
+setInterval(()=>{
+  if(adoptNewer()) return;       // someone else is further ahead
+  if(inBattle) return;           // don't checkpoint mid-fight
+  G.px=P.x; G.py=P.y; save();
+}, 4000);
+grantAstraeon();
+updateCoins(); renderParty(); updateCount();
+</script>
