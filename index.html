@@ -242,9 +242,44 @@ const PAL = {
   shade:[['#7e57c2','#d1c4e9','#311b92'],['#5c6bc0','#c5cae9','#1a237e']],
   light:[['#ffd54f','#fff8e1','#f57f17'],['#fff176','#fffde7','#f9a825']]
 };
-const SYL_A = ['ae','vor','lu','kry','mor','sel','tha','zor','nim','ory','fen','cal','dra','sy','ith'];
-const SYL_B = ['mira','thos','wyn','dris','pha','nyx','ora','vel','gath','rune','lith','sara','dun'];
-const SYL_C = ['','','','ix','ar','eth','on','ys','ael'];
+/* Names are built from pieces that mean something, the way Pikachu is
+   pika (electric crackle) + chu (mouse squeak).  The first piece comes
+   from the element, the second from the body or its biggest feature —
+   so the name tells you what the beast is before you see it.       */
+const EL_ROOTS = {
+  ember: ['pyro','cinder','ember','ash','blaze','scorch','flare','magma'],
+  tide:  ['aqua','frost','rime','glaci','tide','brine','marin','hydro'],
+  gale:  ['zephyr','aero','gust','strato','vent','squall','cirro'],
+  stone: ['petra','geo','crag','terra','slate','basalt','mont'],
+  bloom: ['flora','verdi','thorn','bloom','sylva','fern','moss'],
+  shade: ['umbra','noct','murk','dusk','vesper','nyx','shroud'],
+  light: ['lumen','sol','aur','radi','helio','dawn','gleam']
+};
+const PLAN_ROOTS = {
+  beast:   ['fang','claw','prowl','maul','pard','mane'],
+  serpent: ['coil','wyrm','serp','lash','slith','fold'],
+  avian:   ['wing','plume','talon','crest','soar','pinion'],
+  biped:   ['stalk','warden','knight','sentry','walker','guard']
+};
+const PART_ROOTS = {
+  horn:'gore', wings:'wing', mane:'mane', spikes:'spine', tail:'lash',
+  halo:'halo', fangs:'fang', plates:'aegis', crest:'crest', antennae:'feel'
+};
+const NAME_TAILS = ['','','','us','ix','on','a','yn','ar','eth'];
+
+function coinName(r, element, plan, parts){
+  const head = EL_ROOTS[element][Math.floor(r()*EL_ROOTS[element].length)];
+  // the loudest feature wins the second half, otherwise the body plan does
+  const feats = ['halo','horn','wings','plates','fangs','spikes']
+    .filter(k=>parts[k]).map(k=>PART_ROOTS[k]);
+  const tailPool = (feats.length && r()<0.5) ? feats : PLAN_ROOTS[plan];
+  let tail = tailPool[Math.floor(r()*tailPool.length)];
+  let name = head + tail;
+  // avoid a doubled letter at the seam, then add an ending
+  if(head[head.length-1] === tail[0]) name = head + tail.slice(1);
+  name += NAME_TAILS[Math.floor(r()*NAME_TAILS.length)];
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
 
 const PARTS = ['horn','crest','wings','mane','spikes','tail','halo','fangs','plates','antennae'];
 
@@ -334,11 +369,7 @@ function grow(seed, opt){
   if (plan==='avian') parts.wings = true;
   if (plan==='serpent'){ parts.tail = true; parts.mane = r()<0.5; }
 
-  const name = (opt.name) || (
-    SYL_A[Math.floor(r()*SYL_A.length)] +
-    SYL_B[Math.floor(r()*SYL_B.length)] +
-    SYL_C[Math.floor(r()*SYL_C.length)]
-  ).replace(/^./, ch=>ch.toUpperCase());
+  const name = opt.name || coinName(r, element, plan, parts);
 
   const build = 0.7 + r()*0.6;                 // body mass
   const base = {
