@@ -83,6 +83,43 @@
   .astral{ animation:astralShift 3.4s linear infinite }
   .astral-card{ animation:astralEdge 3.4s linear infinite }
 
+  /* ---------------- duel ---------------- */
+  #duel{position:fixed;inset:0;background:#0b1017;display:none;flex-direction:column;z-index:40}
+  #duel.on{display:flex}
+  #dtop,#dbot{display:flex;align-items:center;gap:14px;padding:12px 16px;background:var(--panel);
+    border-bottom:1px solid var(--line)}
+  #dbot{border-bottom:0;border-top:1px solid var(--line);flex-wrap:wrap}
+  .hero{display:flex;align-items:center;gap:10px;font-size:12px}
+  .hero .hp{font-size:22px;font-weight:700}
+  .hero .mana{color:#60a5fa;font-weight:700}
+  #dturn{margin-left:auto;font-size:11px;letter-spacing:.2em;color:var(--dim)}
+  .board{flex:1;display:flex;align-items:center;justify-content:center;gap:10px;padding:8px;
+    min-height:118px}
+  #dmid{text-align:center;font-size:12px;color:var(--dim);padding:4px 16px;min-height:22px}
+  #dhand{display:flex;gap:8px;overflow-x:auto;flex:1;padding:4px 0}
+  #dactions{display:flex;gap:8px}
+
+  .card{width:96px;flex-shrink:0;background:#111926;border:1px solid var(--line);
+    border-radius:10px;padding:7px;cursor:pointer;position:relative;transition:.12s}
+  .card:hover{transform:translateY(-4px);border-color:var(--dim)}
+  .card.play{border-color:var(--good)}
+  .card.dead{opacity:.35}
+  .card canvas{width:100%;height:52px;background:#0a1119;border-radius:6px;display:block}
+  .card .cn{font-size:9.5px;margin-top:5px;font-weight:600;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis}
+  .card .cs{display:flex;justify-content:space-between;font-size:11px;font-weight:700;margin-top:4px}
+  .card .ca{color:#f87171} .card .ch{color:#4ade80}
+  .card .cost{position:absolute;top:-7px;left:-7px;width:21px;height:21px;border-radius:50%;
+    background:#2563eb;color:#fff;font-size:11px;font-weight:800;display:flex;
+    align-items:center;justify-content:center;border:2px solid #0b1017}
+  .card .abil{font-size:8px;letter-spacing:.06em;color:var(--gold);margin-top:3px;
+    white-space:nowrap;overflow:hidden}
+  .unit{width:88px}
+  .unit.ready{box-shadow:0 0 0 2px #4ade8055}
+  .unit.sel{border-color:var(--gold);box-shadow:0 0 12px #e8b93a66}
+  .unit.target{border-color:#f87171;cursor:crosshair}
+  #duel .empty{color:#3d4757;font-size:11px;letter-spacing:.2em}
+
   #toast{position:fixed;left:50%;top:22px;transform:translateX(-50%);background:var(--panel);
     border:1px solid var(--line);border-radius:10px;padding:11px 18px;font-size:12px;
     display:none;z-index:60}
@@ -92,7 +129,7 @@
 <div id="view"><canvas id="c"></canvas></div>
 
 <div class="hud" id="top">
-  <b>← → ↑ ↓</b> roam &nbsp; <b>P</b> party &nbsp; <b>F</b> fuse &nbsp; <b>B</b> shop<br>
+  <b>← → ↑ ↓</b> roam &nbsp; <b>P</b> party &nbsp; <b>F</b> fuse &nbsp; <b>B</b> shop &nbsp; <b>D</b> duel<br>
   walk the tall grass to meet beasts<br>
   party: <b id="hcount">0</b> &nbsp; region: <b id="hzone">—</b><br>
   <span id="hshrine"></span>
@@ -120,6 +157,24 @@
   <button class="close" data-x="shop">×</button>
   <h2>SUPPLY POST</h2>
   <div class="grid" id="sgrid"></div>
+</div>
+
+<div id="duel">
+  <div id="dtop">
+    <div class="hero" id="dfoehero"></div>
+    <div id="dturn"></div>
+  </div>
+  <div id="dboardfoe" class="board"></div>
+  <div id="dmid"><span id="dlog"></span></div>
+  <div id="dboardme" class="board"></div>
+  <div id="dbot">
+    <div class="hero" id="dmehero"></div>
+    <div id="dhand"></div>
+    <div id="dactions">
+      <button class="btn" id="dend">END TURN</button>
+      <button class="btn alt" id="dquit">LEAVE</button>
+    </div>
+  </div>
 </div>
 
 <div id="battle">
@@ -1148,6 +1203,7 @@ addEventListener('keydown',e=>{
   if(e.code==='KeyP') toggle('party');
   if(e.code==='KeyF') toggle('fuse');
   if(e.code==='KeyB') toggle('shop');
+  if(e.code==='KeyD') startDuel();
   if(e.code==='Escape') closeAll();
 });
 addEventListener('keyup',e=>keys[e.code]=false);
@@ -2067,6 +2123,317 @@ function toast(s){
   el.textContent=s; el.classList.add('on');
   clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove('on'), 2400);
 }
+
+
+/* ==================================================================
+   DUEL — the trading card game.
+   Your caught beasts ARE your deck.  A beast's stats decide its cost
+   and its body decides what it can do: wings let it strike the turn
+   it lands, fangs drain life, plates blunt damage, spikes bite back,
+   a halo mends its owner.
+   ================================================================== */
+const ABILITIES = {
+  wings:  { key:'rush',      label:'RUSH',      desc:'can attack the turn it lands' },
+  fangs:  { key:'drain',     label:'DRAIN',     desc:'heals you for the damage it deals' },
+  plates: { key:'armor',     label:'ARMOR 1',   desc:'takes 1 less from every hit' },
+  spikes: { key:'thorns',    label:'THORNS 1',  desc:'deals 1 back to whatever hits it' },
+  halo:   { key:'mend',      label:'MEND 2',    desc:'heals you 2 when played' },
+  horn:   { key:'pierce',    label:'PIERCE',    desc:'excess damage hits the enemy' },
+};
+
+/* Card numbers are relative to the beasts in play, not to raw stats.
+   A level-40 collection and a level-5 collection both produce a normal
+   1-10 curve; what changes is which beasts are the big ones.        */
+function poolScale(pools){
+  const all = [].concat.apply([], pools);
+  const avgAtk = all.reduce((n,b)=>n+stat(b,'atk'),0)/all.length;
+  const avgHP  = all.reduce((n,b)=>n+maxHP(b),0)/all.length;
+  return { atk: Math.max(1, avgAtk/4), hp: Math.max(1, avgHP/4) };
+}
+
+function toCard(b, sc){
+  sc = sc || { atk:13, hp:26 };
+  const a = Math.max(1, Math.min(9, Math.round(stat(b,'atk')/sc.atk)));
+  const h = Math.max(1, Math.min(9, Math.round(maxHP(b)/sc.hp)));
+  const abil = [];
+  Object.keys(ABILITIES).forEach(part=>{ if(b.parts[part]) abil.push(ABILITIES[part]); });
+  const kept = abil.slice(0,2);
+  // cost rises with the body and again for every keyword it carries
+  // two keywords should not cost as much as two whole points of body
+  const cost = Math.max(1, Math.min(10, Math.round((a + h) / 2.6) + Math.ceil(kept.length/2)));
+  return { name:b.name, el:b.element, rarity:b.rarity||0, beast:b,
+           atk:a, hp:h, maxhp:h, cost, abil:kept.map(x=>x.key),
+           abilLabel:kept.map(x=>x.label).join(' · '),
+           ready:false, justPlayed:true };
+}
+
+let D = null;   // the whole duel state
+
+function buildDeck(pool, size, sc){
+  const deck = [];
+  for(let i=0;i<size;i++) deck.push(toCard(pool[i % pool.length], sc));
+  // shuffle
+  for(let i=deck.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1));
+                                    [deck[i],deck[j]]=[deck[j],deck[i]]; }
+  return deck;
+}
+
+function startDuel(){
+  if(inBattle || panelOpen()) return;
+  if(G.party.length < 3){ toast('You need at least 3 beasts to duel'); return; }
+
+  const lvl = G.party.reduce((a,b)=>Math.max(a,b.level),1);
+  const zone = zoneAt(P.x,P.y);
+  const foePool = [];
+  for(let i=0;i<6;i++)
+    foePool.push(grow((Math.random()*4294967295)>>>0,
+      { level: Math.max(1,lvl-1+Math.floor(Math.random()*3)),
+        element: Math.random()<0.5 ? zone : undefined }));
+
+  const sc = poolScale([G.party, foePool]);
+  D = {
+    scale: sc,
+    me:  { hp:30, mana:1, max:1, deck:buildDeck(G.party, 20, sc), hand:[], board:[] },
+    foe: { hp:30, mana:1, max:1, deck:buildDeck(foePool, 20, sc), hand:[], board:[] },
+    turn:'me', turnNo:1, sel:null, over:false
+  };
+  for(let i=0;i<3;i++){ draw(D.me); draw(D.foe); }
+  draw(D.foe);                                  // going second gets one more
+  document.getElementById('duel').classList.add('on');
+  dlog('Your turn. Play a beast, then send it at them.');
+  renderDuel();
+}
+
+function draw(side){
+  if(!side.deck.length) return null;
+  if(side.hand.length >= 7) { side.deck.pop(); return null; }   // burned
+  const c = side.deck.pop();
+  side.hand.push(c);
+  return c;
+}
+function dlog(s){ const e=document.getElementById('dlog'); if(e) e.textContent=s; }
+
+/* ---------- rendering ---------- */
+function cardArt(c, w, h){
+  const t=document.createElement('canvas'), d=devicePixelRatio||1;
+  t.width=w*d; t.height=h*d;
+  const tx=t.getContext('2d'); tx.setTransform(d,0,0,d,0,0);
+  tx.save(); tx.translate(w/2, h*0.86); tx.scale(0.30,0.30);
+  const cap=SPRITE_CAP; SPRITE_CAP = h*2.4;
+  drawBeast(tx, c.beast, 0, {scale:1});
+  SPRITE_CAP=cap;
+  tx.restore();
+  return t;
+}
+function cardEl(c, kind){
+  const d=document.createElement('div');
+  d.className='card'+(kind==='unit'?' unit':'');
+  const R=RARITIES[c.rarity]||RARITIES[0];
+  d.style.borderColor = R.glow>0.1 ? R.c : '';
+  if(kind!=='unit'){
+    const cost=document.createElement('div'); cost.className='cost'; cost.textContent=c.cost;
+    d.appendChild(cost);
+  }
+  d.appendChild(cardArt(c, kind==='unit'?88:96, 52));
+  const nm=document.createElement('div'); nm.className='cn'; nm.textContent=c.name;
+  nm.style.color=R.c;
+  const st=document.createElement('div'); st.className='cs';
+  st.innerHTML='<span class="ca">'+c.atk+'</span>'+
+    '<span style="color:'+ELEMENTS[c.el].col+';font-size:8px;letter-spacing:.1em">'+
+    ELEMENTS[c.el].name+'</span><span class="ch">'+c.hp+'</span>';
+  d.appendChild(nm); d.appendChild(st);
+  if(c.abilLabel){ const ab=document.createElement('div'); ab.className='abil';
+                   ab.textContent=c.abilLabel; d.appendChild(ab); }
+  return d;
+}
+
+function renderDuel(){
+  if(!D) return;
+  document.getElementById('dfoehero').innerHTML =
+    '<span>OPPONENT</span><span class="hp">'+D.foe.hp+'</span>'+
+    '<span class="mana">'+D.foe.mana+'/'+D.foe.max+' ✦</span>'+
+    '<span style="color:var(--dim)">'+D.foe.hand.length+' in hand · '+D.foe.deck.length+' left</span>';
+  document.getElementById('dmehero').innerHTML =
+    '<span>YOU</span><span class="hp">'+D.me.hp+'</span>'+
+    '<span class="mana">'+D.me.mana+'/'+D.me.max+' ✦</span>'+
+    '<span style="color:var(--dim)">'+D.me.deck.length+' left</span>';
+  document.getElementById('dturn').textContent =
+    'TURN '+D.turnNo+' · '+(D.turn==='me'?'YOURS':'THEIRS');
+
+  const fb=document.getElementById('dboardfoe'); fb.innerHTML='';
+  if(!D.foe.board.length) fb.innerHTML='<span class="empty">their side is empty</span>';
+  D.foe.board.forEach((c,i)=>{
+    const el=cardEl(c,'unit');
+    if(D.sel!==null){ el.classList.add('target');
+      el.onclick=()=>attack(D.me.board[D.sel], c, i); }
+    fb.appendChild(el);
+  });
+
+  const mb=document.getElementById('dboardme'); mb.innerHTML='';
+  if(!D.me.board.length) mb.innerHTML='<span class="empty">play a beast from your hand</span>';
+  D.me.board.forEach((c,i)=>{
+    const el=cardEl(c,'unit');
+    if(c.ready && D.turn==='me') el.classList.add('ready');
+    if(D.sel===i) el.classList.add('sel');
+    el.onclick=()=>{
+      if(D.turn!=='me' || !c.ready) return;
+      D.sel = (D.sel===i) ? null : i;
+      dlog(D.sel===null ? 'Pick a beast to attack with.'
+                        : 'Now pick what '+c.name+' hits — a beast, or the opponent.');
+      renderDuel();
+    };
+    mb.appendChild(el);
+  });
+
+  const hand=document.getElementById('dhand'); hand.innerHTML='';
+  D.me.hand.forEach((c,i)=>{
+    const el=cardEl(c,'hand');
+    if(D.turn==='me' && c.cost<=D.me.mana && D.me.board.length<5) el.classList.add('play');
+    el.onclick=()=>playCard(i);
+    hand.appendChild(el);
+  });
+
+  // clicking the opponent's portrait sends the attack at their face
+  const fh=document.getElementById('dfoehero');
+  fh.style.cursor = D.sel!==null ? 'crosshair' : '';
+  fh.onclick = ()=>{ if(D.sel!==null) attack(D.me.board[D.sel], null, -1); };
+}
+
+/* ---------- actions ---------- */
+function playCard(i){
+  if(!D || D.turn!=='me') return;
+  const c=D.me.hand[i];
+  if(!c) return;
+  if(c.cost>D.me.mana){ dlog('Not enough energy for '+c.name+'.'); return; }
+  if(D.me.board.length>=5){ dlog('Your side is full.'); return; }
+  D.me.mana-=c.cost;
+  D.me.hand.splice(i,1);
+  c.ready = c.abil.includes('rush');
+  D.me.board.push(c);
+  if(c.abil.includes('mend')){ D.me.hp+=2; dlog(c.name+' lands and mends you for 2.'); }
+  else dlog(c.name+' takes the field.');
+  renderDuel();
+}
+
+function elMult(a,d){ return eff(a,d)===1.75 ? 1.5 : eff(a,d)===0.55 ? 0.75 : 1; }
+
+function strike(att, def, attSide, defSide){
+  let dmg = Math.round(att.atk * elMult(att.el, def.el));
+  if(def.abil.includes('armor')) dmg = Math.max(0, dmg-1);
+  const over = dmg - def.hp;
+  def.hp -= dmg;
+  if(att.abil.includes('drain')) attSide.hp += dmg;
+  if(def.abil.includes('thorns')) att.hp -= 1;
+  if(att.abil.includes('pierce') && over>0) defSide.hp -= over;
+  // the defender hits back
+  let back = Math.round(def.atk * elMult(def.el, att.el));
+  if(att.abil.includes('armor')) back = Math.max(0, back-1);
+  if(def.hp>0) att.hp -= back;
+  return dmg;
+}
+
+function cleanup(){
+  ['me','foe'].forEach(k=>{
+    D[k].board = D[k].board.filter(c=>c.hp>0);
+  });
+}
+
+function attack(att, def, idx){
+  if(!D || D.turn!=='me' || !att || !att.ready) return;
+  if(def){
+    const dmg = strike(att, def, D.me, D.foe);
+    dlog(att.name+' hits '+def.name+' for '+dmg+'.');
+  } else {
+    let dmg = Math.round(att.atk);
+    D.foe.hp -= dmg;
+    if(att.abil.includes('drain')) D.me.hp += dmg;
+    dlog(att.name+' strikes the opponent for '+dmg+'.');
+  }
+  att.ready=false; D.sel=null;
+  cleanup(); renderDuel(); checkWin();
+}
+
+function endTurn(){
+  if(!D || D.turn!=='me' || D.over) return;
+  D.turn='foe'; D.sel=null; renderDuel();
+  setTimeout(foeTurnDuel, 700);
+}
+
+function foeTurnDuel(){
+  if(!D || D.over) return;
+  D.foe.max = Math.min(10, D.foe.max+1);
+  D.foe.mana = D.foe.max;
+  draw(D.foe);
+
+  // play the biggest thing it can afford, repeatedly
+  let played=true;
+  while(played && D.foe.board.length<5){
+    played=false;
+    const options = D.foe.hand
+      .map((c,i)=>({c,i}))
+      .filter(o=>o.c.cost<=D.foe.mana)
+      .sort((a,b)=>(b.c.atk+b.c.hp)-(a.c.atk+a.c.hp));
+    if(options.length){
+      const {c,i}=options[0];
+      D.foe.mana-=c.cost; D.foe.hand.splice(i,1);
+      c.ready = c.abil.includes('rush');
+      if(c.abil.includes('mend')) D.foe.hp+=2;
+      D.foe.board.push(c);
+      played=true;
+    }
+  }
+  renderDuel();
+
+  // then attack: favour trades it wins, otherwise go face
+  setTimeout(()=>{
+    if(!D || D.over) return;
+    D.foe.board.forEach(att=>{
+      if(!att.ready || D.over) return;
+      const kill = D.me.board.find(t=>
+        Math.round(att.atk*elMult(att.el,t.el)) >= t.hp &&
+        Math.round(t.atk*elMult(t.el,att.el)) < att.hp);
+      if(kill){ strike(att, kill, D.foe, D.me); }
+      else if(D.me.board.length && Math.random()<0.35){
+        strike(att, D.me.board[0], D.foe, D.me);
+      } else { D.me.hp -= att.atk; }
+      att.ready=false;
+    });
+    cleanup(); renderDuel(); checkWin();
+    if(D && !D.over){
+      D.turn='me'; D.turnNo++;
+      D.me.max=Math.min(10,D.me.max+1); D.me.mana=D.me.max;
+      D.me.board.forEach(c=>c.ready=true);
+      draw(D.me);
+      dlog('Your turn.');
+      renderDuel();
+    }
+  }, 900);
+}
+
+function checkWin(){
+  if(!D || D.over) return;
+  if(D.foe.hp<=0){
+    D.over=true;
+    const prize = 40 + D.turnNo*2;
+    G.coins += prize;
+    gainXP(G.party[0], 120);
+    save(); updateCoins();
+    dlog('You win! +'+prize+' ◈ and 120 XP to '+G.party[0].name+'.');
+    toast('Duel won — +'+prize+' ◈');
+    setTimeout(endDuel, 2600);
+  } else if(D.me.hp<=0){
+    D.over=true;
+    dlog('You lose the duel.');
+    setTimeout(endDuel, 2200);
+  }
+}
+function endDuel(){
+  D=null;
+  document.getElementById('duel').classList.remove('on');
+}
+
+document.getElementById('dend').onclick=endTurn;
+document.getElementById('dquit').onclick=endDuel;
 
 /* ==================================================================
    LOOP
